@@ -1,10 +1,9 @@
 /*
- * MIDIUSB_test.ino
+ * mixxx_midi_clock.ino
  *
- * Created: 4/6/2015 10:47:08 AM
- * Author: gurbrinder grewal
- * Modified by Arduino LLC (2015)
- */ 
+ * Created: 10/17/2024
+ * Author: alex miller
+ */
 
 #include "MIDIUSB.h"
 
@@ -39,15 +38,29 @@ void controlChange(byte channel, byte control, byte value) {
   MidiUSB.sendMIDI(event);
 }
 
-float bpm;
-int bpm_whole;
-float bpm_fractional;
-bool next_beat_in_set = false;
-unsigned long previous_time = micros();
-unsigned long next_beat_in;
+void sendMidiClock() {
+  midiEventPacket_t clockEvent ={0x0F, clockStatus, 0x00, 0x00};
+  MidiUSB.sendMIDI(clockEvent);
+  MidiUSB.flush();
+}
 
-unsigned long beat_led_previous_micros = 0;
-const long beat_led_interval_micros = 100000;
+const int ppq = 24;
+const byte clockStatus = 0xF8;
+
+float bpm;
+int bpmWhole;
+float bpmFractional;
+unsigned long previousTime = micros();
+unsigned long startClockIn;
+bool  clockStartInSet = false;
+bool runClock = false;
+
+long clockPulseInterval;
+long currentClockPulseInterval;
+int currentClockPulse = 1;
+
+unsigned long beatLedPreviousMicros = 0;
+const long beatLedIntervalMicros = 100000;
 
 midiEventPacket_t rx;
 
@@ -70,52 +83,76 @@ void loop() {
       /* Serial.println(rx.byte3, HEX); */
 
       if (rx.byte2 == 0x34) {
-        // The script the sends this data subtracts 50 from the BPM so it fits
-        // in a 0-127 midi range. So, 50 is added to the value to get the actual BPM.
-        bpm_whole = int(rx.byte3) + 50;
+        // The Mixxx controller script subtracts 50 from the BPM so it fits in a
+        // 0-127 midi range. So, 50 is added to the value to get the actual BPM.
+        bpmWhole = int(rx.byte3) + 50;
         /* Serial.print("BPM Whole: "); */
-        /* Serial.println(bpm_whole); */
+        /* Serial.println(bpmWhole); */
       }
 
       if (rx.byte2 == 0x35) {
-        bpm_fractional = float(rx.byte3) / 100.0;
+        bpmFractional = float(rx.byte3) / 100.0;
         /* Serial.print("BPM Fractional: "); */
-        /* Serial.println(bpm_fractional); */
+        /* Serial.println(bpmFractional); */
       }
 
-      bpm = bpm_whole + bpm_fractional;
+      bpm = bpmWhole + bpmFractional;
       /* Serial.print("BPM: "); */
       /* Serial.println(bpm); */
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
-        unsigned long beat_length = ceil(60000000 / bpm);
-        float beat_distance = rx.byte3 / 127.0;
-        float dist_to_next_beat = 1 - beat_distance;
-        if (!next_beat_in_set) {
-          next_beat_in = ceil(beat_length * dist_to_next_beat);
-          next_beat_in_set = true;
+        // The beat length for the given bpm in micros
+        // TODO: drop the use of ceil in this block
+        unsigned long beatLength = ceil(60000000 / bpm);
+        clockPulseInterval = ceil(60000000 / (ppq * bpm));
+
+        // beat_distance value from Mixxx is a number between 0 and 1. It
+        // represents the distance from the previous beat marker. It is
+        // multiplied by 127 in order to pass it as a midi value, so it is
+        // divided here in order to get the original float value.
+        float beatDistance = rx.byte3 / 127.0;
+        float distToNextBeat = 1 - beatDistance;
+        if (!runClock) {
+          currentClockPulseInterval = ceil(beatLength * distToNextBeat);
+          runClock = true;
         }
-        /* Serial.print("beat_length: "); */
-        /* Serial.print(beat_length); */
-        /* Serial.print(" beat_distance: "); */
-        /* Serial.print(beat_distance); */
+        /* Serial.print("beatLength: "); */
+        /* Serial.print(beatLength); */
+        /* Serial.print(" beatDistance: "); */
+        /* Serial.print(beatDistance); */
         /* Serial.print(" DTNB: "); */
-        /* Serial.print(dist_to_next_beat); */
+        /* Serial.print(distToNextBeat); */
         /* Serial.print(" NBI: "); */
-        /* Serial.println(next_beat_in); */
+        /* Serial.println(startClockIn); */
       }
     }
   } while (rx.header != 0);
 
-  unsigned long current_time = micros();
-  if (next_beat_in_set && (current_time - previous_time > next_beat_in)) {
-    Serial.println("BEAT!!!");
-    digitalWrite(LED_BUILTIN, HIGH);
-    previous_time = current_time;
-    beat_led_previous_micros = current_time;
+  unsigned long currentTime = micros();
+  if (runClock && (currentTime - previousTime > currentClockPulseInterval)) {
+    sendMidiClock();
+
+    previousTime = currentTime;
+
+    // Turn on LED on each beat
+    if (currentClockPulse == 1) {
+      digitalWrite(LED_BUILTIN, HIGH);
+      beatLedPreviousMicros = currentTime;
+    }
+
+    // Keep track of the pulse count
+    if (currentClockPulse < ppq) {
+      currentClockPulse++;
+    } else if (currentClockPulse == ppq) {
+      currentClockPulse = 1;
+    }
+
+    // reset the pulse interval back to interval computed from the bpm
+    currentClockPulseInterval = clockPulseInterval;
   }
 
-  if (current_time - beat_led_previous_micros > beat_led_interval_micros) {
+  // Turn off beat LED after 1/16 note of time
+  if (currentTime - beatLedPreviousMicros > (clockPulseInterval * 6)) {
     digitalWrite(LED_BUILTIN, LOW);
   }
 }
