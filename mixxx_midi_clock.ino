@@ -39,13 +39,14 @@ void controlChange(byte channel, byte control, byte value) {
 }
 
 void sendMidiClock() {
+  byte clockStatus = 0xF8;
   midiEventPacket_t clockEvent ={0x0F, clockStatus, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
   MidiUSB.flush();
 }
 
 const int ppq = 24;
-const byte clockStatus = 0xF8;
+const unsigned long MICROS_PER_MIN = 60000000UL;
 
 float bpm;
 int bpmWhole;
@@ -102,9 +103,8 @@ void loop() {
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
         // The beat length for the given bpm in micros
-        // TODO: drop the use of ceil in this block
-        unsigned long beatLength = ceil(60000000 / bpm);
-        clockPulseInterval = ceil(60000000 / (ppq * bpm));
+        unsigned long beatLength =  MICROS_PER_MIN / bpm;
+        clockPulseInterval = beatLength / ppq;
 
         // beat_distance value from Mixxx is a number between 0 and 1. It
         // represents the distance from the previous beat marker. It is
@@ -113,7 +113,7 @@ void loop() {
         float beatDistance = rx.byte3 / 127.0;
         float distToNextBeat = 1 - beatDistance;
         if (!runClock) {
-          currentClockPulseInterval = ceil(beatLength * distToNextBeat);
+          currentClockPulseInterval = beatLength * distToNextBeat;
           runClock = true;
         }
         /* Serial.print("beatLength: "); */
@@ -129,7 +129,7 @@ void loop() {
   } while (rx.header != 0);
 
   unsigned long currentTime = micros();
-  if (runClock && (currentTime - previousTime > currentClockPulseInterval)) {
+  if (runClock && (currentTime - previousTime >= currentClockPulseInterval)) {
     sendMidiClock();
 
     previousTime = currentTime;
@@ -152,7 +152,7 @@ void loop() {
   }
 
   // Turn off beat LED after 1/16 note of time
-  if (currentTime - beatLedPreviousMicros > (clockPulseInterval * 6)) {
+  if (currentTime - beatLedPreviousMicros >= (clockPulseInterval * 6)) {
     digitalWrite(LED_BUILTIN, LOW);
   }
 }
