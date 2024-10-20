@@ -23,11 +23,6 @@ void noteOff(byte channel, byte pitch, byte velocity) {
   MidiUSB.sendMIDI(noteOff);
 }
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(LED_BUILTIN, OUTPUT);
-}
-
 // First parameter is the event type (0x0B = control change).
 // Second parameter is the event type, combined with the channel.
 // Third parameter is the control number number (0-119).
@@ -39,10 +34,14 @@ void controlChange(byte channel, byte control, byte value) {
 }
 
 void sendMidiClock() {
-  byte clockStatus = 0xF8;
-  midiEventPacket_t clockEvent ={0x0F, clockStatus, 0x00, 0x00};
+  midiEventPacket_t clockEvent ={0x0F, 0xF8, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
   MidiUSB.flush();
+}
+
+void setup() {
+  /* Serial.begin(115200); */
+  pinMode(LED_BUILTIN, OUTPUT);
 }
 
 const int ppq = 24;
@@ -52,8 +51,6 @@ float bpm;
 int bpmWhole;
 float bpmFractional;
 unsigned long previousTime = micros();
-unsigned long startClockIn;
-bool  clockStartInSet = false;
 bool runClock = false;
 
 long clockPulseInterval;
@@ -65,8 +62,7 @@ const long beatLedIntervalMicros = 100000;
 
 midiEventPacket_t rx;
 
-// TODO: send 24 ppq
-// TODO: send clock to ardour to verify accurate BPM
+// TODO: Refactor to use hardware timer interrupt
 // TODO: Use drum machine to guage latency
 // TODO: detect BPM changes and recalculate interval
 
@@ -116,14 +112,6 @@ void loop() {
           currentClockPulseInterval = beatLength * distToNextBeat;
           runClock = true;
         }
-        /* Serial.print("beatLength: "); */
-        /* Serial.print(beatLength); */
-        /* Serial.print(" beatDistance: "); */
-        /* Serial.print(beatDistance); */
-        /* Serial.print(" DTNB: "); */
-        /* Serial.print(distToNextBeat); */
-        /* Serial.print(" NBI: "); */
-        /* Serial.println(startClockIn); */
       }
     }
   } while (rx.header != 0);
