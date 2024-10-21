@@ -40,7 +40,6 @@
 /*   MidiUSB.sendMIDI(event); */
 /* } */
 
-// TODO remove this and rename references below to F_CPU which is already defined
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
 // beat per 1 second)
@@ -50,7 +49,6 @@ const int PPQ = 24;
 const float defaultBpm = 120; // Default BPM until read from midi messages from Mixxx
 
 volatile float bpm = 0;
-// TODO rename this to clockPulseInterval
 volatile unsigned int timerComparePulseValue;
 volatile int currentClockPulse = 1;
 volatile byte playState = 0; // 0 = stopped, 1 = playing, 2 = paused
@@ -63,10 +61,7 @@ bool bpmChanged = false;
 midiEventPacket_t rx;
 
 void setup() {
-  Serial.begin(115200);
-
   // Set up Timer1
-  /* cli(); // Disable interrupts while configuring */
   TCCR1A = 0; // Control Register A
   TCCR1B = 0; // Control Register B
   TCCR1B |= B00000100; // Prescaler = 256
@@ -77,14 +72,11 @@ void setup() {
   OCR1A = timerComparePulseValue;
 
   TIMSK1 |= B00000010; // Enable timer overflow interrupt
-  /* sei(); // Enable interrupts */
-
 
   // Setup beat pulse LED. This LED will pulse on each beat (eg, first of ever
   // 24 pulses).
   pinMode(LED_BUILTIN, OUTPUT);
 }
-
 
 void loop() {
   do {
@@ -113,6 +105,7 @@ void loop() {
       if (newBpm != bpm) {
         bpmChanged = true;
 
+        // TODO: try removing the stop / start here
         cli(); // stop interrupts
         bpm = newBpm;
         calculateTimerComparePulseValue();
@@ -143,6 +136,7 @@ void loop() {
   } while (rx.header != 0);
 }
 
+// Timer1 COMPA interrupt function
 ISR(TIMER1_COMPA_vect) {
   // Schedule the next interrupt
   OCR1A += timerComparePulseValue;
@@ -153,14 +147,14 @@ ISR(TIMER1_COMPA_vect) {
     sendMidiStart();
   }
 
-  /* // Turn on LED on each beat */
+  // Turn on LED on each beat for about 1/16th note duration
   if (currentClockPulse == 1) {
     digitalWrite(LED_BUILTIN, HIGH);
   } else if (currentClockPulse == 6) {
     digitalWrite(LED_BUILTIN, LOW);
   }
 
-  /* // Keep track of the pulse count. Integer in the range 1..24. */
+  // Keep track of the pulse count. Integer in the range 1..24.
   if (currentClockPulse < PPQ) {
     currentClockPulse++;
   } else if (currentClockPulse == PPQ) {
@@ -169,6 +163,8 @@ ISR(TIMER1_COMPA_vect) {
 }
 
 void calculateTimerComparePulseValue() {
+  // Use the defaultBpm to generate the clock until bpm is set from midi
+  // messages from Mixxx
   float currentBpm = (bpm > 0) ? bpm : defaultBpm;
   unsigned long pulsePeriod = (MICROS_PER_MIN / currentBpm) / PPQ;
   pulsePeriod = min(pulsePeriod, MAX_CLOCK_TIME);  // Ensure we don't exceed max clock time
@@ -178,7 +174,7 @@ void calculateTimerComparePulseValue() {
   unsigned long timerClock = CPU_FREQ / 256;
   timerComparePulseValue = (pulsePeriod * timerClock) / 1000000UL;
 
-  // Ensure the compare value fits in 16 bits
+  // Ensure the compare value fits in 16 bits for Timer1
   timerComparePulseValue = min(timerComparePulseValue, 65535);
 }
 
