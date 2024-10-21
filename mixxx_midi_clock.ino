@@ -5,6 +5,13 @@
  * Author: alex miller
  */
 
+// TODO add button to toggle play pause.
+// TODO add button to stop
+// TODO add midi jack and write midi clock / transport controls to it
+// TODO test with external drum machine
+// TODO add encoder to change the phase
+// TODO add screen to display bpm, phase offset, transport state
+
 #include "MIDIUSB.h"
 
 // First parameter is the event type (0x09 = note on, 0x08 = note off).
@@ -56,11 +63,7 @@ float bpmFractional;
 unsigned long previousTime = micros();
 bool bpmChanged = false;
 
-
 midiEventPacket_t rx;
-
-// TODO: Use drum machine to guage latency
-// TODO: detect BPM changes and recalculate interval
 
 void setup() {
   Serial.begin(115200);
