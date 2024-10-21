@@ -44,23 +44,20 @@
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
 // beat per 1 second)
-const unsigned long MAX_CLOCK_TIME = 1000000UL;  
+const unsigned long MAX_CLOCK_TIME = 1000000UL;
 const unsigned long MICROS_PER_MIN = 60000000UL;
 const int PPQ = 24;
 const float defaultBpm = 120; // Default BPM until read from midi messages from Mixxx
 
 volatile float bpm = 0;
 // TODO rename this to clockPulseInterval
-volatile unsigned int timerCompareValue;
+volatile unsigned int timerComparePulseValue;
 volatile int currentClockPulse = 1;
-volatile unsigned long beatLedPreviousMicros = 0;
-volatile const long beatLedIntervalMicros = 100000;
 volatile byte playState = 0; // 0 = stopped, 1 = playing, 2 = paused
 volatile bool receivingMidi = false;
 
 int bpmWhole;
 float bpmFractional;
-unsigned long previousTime = micros();
 bool bpmChanged = false;
 
 midiEventPacket_t rx;
@@ -76,8 +73,8 @@ void setup() {
 
   // Compute the compare value (pulse length) and assign it to the Compare A
   // Register.
-  calculateTimerCompareValue();
-  OCR1A = timerCompareValue;
+  calculateTimerComparePulseValue();
+  OCR1A = timerComparePulseValue;
 
   TIMSK1 |= B00000010; // Enable timer overflow interrupt
   /* sei(); // Enable interrupts */
@@ -118,7 +115,7 @@ void loop() {
 
         cli(); // stop interrupts
         bpm = newBpm;
-        calculateTimerCompareValue();
+        calculateTimerComparePulseValue();
         sei(); // resume interrupts
 
         bpmChanged = false;
@@ -148,7 +145,7 @@ void loop() {
 
 ISR(TIMER1_COMPA_vect) {
   // Schedule the next interrupt
-  OCR1A += timerCompareValue;
+  OCR1A += timerComparePulseValue;
 
   sendMidiClock();
 
@@ -171,18 +168,18 @@ ISR(TIMER1_COMPA_vect) {
   }
 }
 
-void calculateTimerCompareValue() {
+void calculateTimerComparePulseValue() {
   float currentBpm = (bpm > 0) ? bpm : defaultBpm;
   unsigned long pulsePeriod = (MICROS_PER_MIN / currentBpm) / PPQ;
   pulsePeriod = min(pulsePeriod, MAX_CLOCK_TIME);  // Ensure we don't exceed max clock time
-  
+
   // Calculate the timer compare value
   // Timer clock = CPU clock / prescaler
   unsigned long timerClock = CPU_FREQ / 256;
-  timerCompareValue = (pulsePeriod * timerClock) / 1000000UL;
-  
+  timerComparePulseValue = (pulsePeriod * timerClock) / 1000000UL;
+
   // Ensure the compare value fits in 16 bits
-  timerCompareValue = min(timerCompareValue, 65535);
+  timerComparePulseValue = min(timerComparePulseValue, 65535);
 }
 
 void sendMidiClock() {
