@@ -10,35 +10,9 @@
 // TODO add midi jack and write midi clock / transport controls to it
 // TODO test with external drum machine
 // TODO add encoder to change the phase
-// TODO add screen to display bpm, phase offset, transport state
+// TODO add screen to display bpm, phase offset, and transport state
 
 #include "MIDIUSB.h"
-
-// First parameter is the event type (0x09 = note on, 0x08 = note off).
-// Second parameter is note-on/note-off, combined with the channel.
-// Channel can be anything between 0-15. Typically reported to the user as 1-16.
-// Third parameter is the note number (48 = middle C).
-// Fourth parameter is the velocity (64 = normal, 127 = fastest).
-
-/* void noteOn(byte channel, byte pitch, byte velocity) { */
-/*   midiEventPacket_t noteOn = {0x09, 0x90 | channel, pitch, velocity}; */
-/*   MidiUSB.sendMIDI(noteOn); */
-/* } */
-
-/* void noteOff(byte channel, byte pitch, byte velocity) { */
-/*   midiEventPacket_t noteOff = {0x08, 0x80 | channel, pitch, velocity}; */
-/*   MidiUSB.sendMIDI(noteOff); */
-/* } */
-
-// First parameter is the event type (0x0B = control change).
-// Second parameter is the event type, combined with the channel.
-// Third parameter is the control number number (0-119).
-// Fourth parameter is the control value (0-127).
-
-/* void controlChange(byte channel, byte control, byte value) { */
-/*   midiEventPacket_t event = {0x0B, 0xB0 | channel, control, value}; */
-/*   MidiUSB.sendMIDI(event); */
-/* } */
 
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
@@ -46,17 +20,22 @@ const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 const unsigned long MAX_CLOCK_TIME = 1000000UL;
 const unsigned long MICROS_PER_MIN = 60000000UL;
 const int PPQ = 24;
-const float defaultBpm = 120; // Default BPM until read from midi messages from Mixxx
+const float DEFAULT_BPM = 120; // Default BPM until read from midi messages from Mixxx
 
 volatile float bpm = 0;
 volatile unsigned int timerComparePulseValue;
 volatile int currentClockPulse = 1;
-volatile byte playState = 0; // 0 = stopped, 1 = playing, 2 = paused
 volatile bool receivingMidi = false;
 
 int bpmWhole;
 float bpmFractional;
 bool bpmChanged = false;
+
+const int PLAY_BUTTON = 2; // pin 2
+byte playState = 0; // 0 = stopped, 1 = playing, 2 = paused
+int playButtonState;
+unsigned long lastDebounceTimeMs = 0;
+unsigned long debounceDelayMs = 50;
 
 midiEventPacket_t rx;
 
@@ -73,12 +52,15 @@ void setup() {
 
   TIMSK1 |= B00000010; // Enable timer overflow interrupt
 
-  // Setup beat pulse LED. This LED will pulse on each beat (eg, first of ever
+  // Setup beat pulse LED. This LED will pulse on each beat (eg, first of every
   // 24 pulses).
   pinMode(LED_BUILTIN, OUTPUT);
+
+  pinMode(PLAY_PAUSE_BUTTON, INPUT);
 }
 
 void loop() {
+  // TODO refactor: extract this loop to a function
   do {
     rx = MidiUSB.read();
     if (rx.header != 0) {
@@ -134,6 +116,18 @@ void loop() {
       }
     }
   } while (rx.header != 0);
+
+  int playButtonState = digitalRead(PLAY_BUTTON);
+  if (playButtonState == HIGH && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
+    if (playState == 0) { // stopped
+      sendMidiStart();
+    } else if (playState == 1) { // playing
+      // TODO send stop message
+    } else if (playState == 2) { // paused
+      // TODO send continue
+    }
+    lastDebounceTimeMs = millis();
+  }
 }
 
 // Timer1 COMPA interrupt function
@@ -143,9 +137,7 @@ ISR(TIMER1_COMPA_vect) {
 
   sendMidiClock();
 
-  if (receivingMidi && playState != 1) {
-    sendMidiStart();
-  }
+  // TODO: move the beat LED to loop function
 
   // Turn on LED on each beat for about 1/16th note duration
   if (currentClockPulse == 1) {
@@ -163,9 +155,9 @@ ISR(TIMER1_COMPA_vect) {
 }
 
 void calculateTimerComparePulseValue() {
-  // Use the defaultBpm to generate the clock until bpm is set from midi
+  // Use the DEFAULT_BPM to generate the clock until bpm is set from midi
   // messages from Mixxx
-  float currentBpm = (bpm > 0) ? bpm : defaultBpm;
+  float currentBpm = (bpm > 0) ? bpm : DEFAULT_BPM;
   unsigned long pulsePeriod = (MICROS_PER_MIN / currentBpm) / PPQ;
   pulsePeriod = min(pulsePeriod, MAX_CLOCK_TIME);  // Ensure we don't exceed max clock time
 
@@ -178,6 +170,7 @@ void calculateTimerComparePulseValue() {
   timerComparePulseValue = min(timerComparePulseValue, 65535);
 }
 
+// TODO refactor: extract sendMidiTransportMsg method
 void sendMidiClock() {
   midiEventPacket_t clockEvent ={0x0F, 0xF8, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
@@ -188,5 +181,4 @@ void sendMidiStart() {
   midiEventPacket_t clockEvent ={0x0F, 0xFA, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
   MidiUSB.flush();
-  playState = 1;
 }
