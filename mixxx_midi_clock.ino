@@ -16,16 +16,17 @@
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
 // beat per 1 second)
-const unsigned long MAX_CLOCK_TIME = 1000000UL;
-const unsigned long MICROS_PER_MIN = 60000000UL;
+const unsigned long MAX_CLOCK_TIME = 1000000;
+const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
 const float DEFAULT_BPM = 120; // Default BPM until read from midi messages from Mixxx
 
-volatile float bpm = 0;
 volatile unsigned int timerComparePulseValue;
 volatile int currentClockPulse = 1;
-volatile bool receivingMidi = false;
 
+bool receivingMidi = false;
+
+float bpm = 0;
 int bpmWhole;
 float bpmFractional;
 bool bpmChanged = false;
@@ -89,11 +90,8 @@ void loop() {
       if (newBpm != bpm) {
         bpmChanged = true;
 
-        // TODO: try removing the stop / start here
-        cli(); // stop interrupts
         bpm = newBpm;
         calculateTimerComparePulseValue();
-        sei(); // resume interrupts
 
         bpmChanged = false;
       }
