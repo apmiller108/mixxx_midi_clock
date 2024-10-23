@@ -5,7 +5,6 @@
  * Author: alex miller
  */
 
-// TODO add button to toggle play pause.
 // TODO add button to stop
 // TODO add midi jack and write midi clock / transport controls to it
 // TODO test with external drum machine
@@ -32,14 +31,17 @@ float bpmFractional;
 bool bpmChanged = false;
 
 const int PLAY_BUTTON = 2; // pin 2
+// TODO refactor use enum
 byte playState = 0; // 0 = stopped, 1 = playing, 2 = paused
 int playButtonState;
+int previousPlayButtonState = LOW;
 unsigned long lastDebounceTimeMs = 0;
 unsigned long debounceDelayMs = 50;
 
 midiEventPacket_t rx;
 
 void setup() {
+  Serial.begin(115200);
   // Set up Timer1
   TCCR1A = 0; // Control Register A
   TCCR1B = 0; // Control Register B
@@ -56,7 +58,7 @@ void setup() {
   // 24 pulses).
   pinMode(LED_BUILTIN, OUTPUT);
 
-  pinMode(PLAY_PAUSE_BUTTON, INPUT);
+  pinMode(PLAY_BUTTON, INPUT);
 }
 
 void loop() {
@@ -117,16 +119,32 @@ void loop() {
     }
   } while (rx.header != 0);
 
-  int playButtonState = digitalRead(PLAY_BUTTON);
-  if (playButtonState == HIGH && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
+  // Play button
+  playButtonState = digitalRead(PLAY_BUTTON);
+  if (playButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
+    Serial.println("button pressed");
     if (playState == 0) { // stopped
+      playState = 1;
       sendMidiStart();
+      Serial.println(playState);
     } else if (playState == 1) { // playing
       // TODO send stop message
+      playState = 2;
+      Serial.println(playState);
     } else if (playState == 2) { // paused
       // TODO send continue
+      playState = 1;
+      Serial.println(playState);
     }
     lastDebounceTimeMs = millis();
+  }
+  previousPlayButtonState = playButtonState;
+
+  // Turn on LED on each beat for about 1/16th note duration
+  if (currentClockPulse == 1) {
+    digitalWrite(LED_BUILTIN, HIGH);
+  } else if (currentClockPulse == 6) {
+    digitalWrite(LED_BUILTIN, LOW);
   }
 }
 
@@ -136,15 +154,6 @@ ISR(TIMER1_COMPA_vect) {
   OCR1A += timerComparePulseValue;
 
   sendMidiClock();
-
-  // TODO: move the beat LED to loop function
-
-  // Turn on LED on each beat for about 1/16th note duration
-  if (currentClockPulse == 1) {
-    digitalWrite(LED_BUILTIN, HIGH);
-  } else if (currentClockPulse == 6) {
-    digitalWrite(LED_BUILTIN, LOW);
-  }
 
   // Keep track of the pulse count. Integer in the range 1..24.
   if (currentClockPulse < PPQ) {
@@ -181,4 +190,8 @@ void sendMidiStart() {
   midiEventPacket_t clockEvent ={0x0F, 0xFA, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
   MidiUSB.flush();
+}
+
+boolean playButtonRising() {
+  return previousPlayButtonState == LOW && playButtonState == HIGH;
 }
