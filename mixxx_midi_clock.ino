@@ -107,10 +107,12 @@ void loop() {
         float beatDistance = rx.byte3 / 127.0;
         float distToNextBeat = 1 - beatDistance;
         if (!receivingMidi) {
-          cli(); // stop interrupts
           // Start next pulse when the next beat is predicted to happen
-          OCR1A += beatLength * distToNextBeat;
-          sei(); // resume interrupts
+          // This should only be needed once.
+          // TODO: determine if this is really needed. Maybe not if I can change
+          // the phase manually which probably something I will need to do
+          // anyway.
+          OCR1A += ((beatLength * distToNextBeat) * CPU_FREQ / 256) / 1000000UL
           receivingMidi = true;
         }
       }
