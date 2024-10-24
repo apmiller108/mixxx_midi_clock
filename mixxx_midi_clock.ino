@@ -35,7 +35,8 @@ int bpmWhole;
 float bpmFractional;
 bool bpmChanged = false;
 
-const int PLAY_BUTTON = 2; // pin 2
+const int PLAY_BUTTON = 2; 
+const int STOP_BUTTON = 4; 
 enum playState {
   PLAYING,
   PAUSED,
@@ -43,7 +44,10 @@ enum playState {
 };
 enum playState currentPlayState = STOPPED;
 int playButtonState;
+int stopButtonState;
 int previousPlayButtonState = LOW;
+int previousStopButtonState = LOW;
+
 unsigned long lastDebounceTimeMs = 0;
 unsigned long debounceDelayMs = 75;
 
@@ -89,6 +93,9 @@ void loop() {
     lastDebounceTimeMs = millis();
   }
   previousPlayButtonState = playButtonState;
+
+  // stop button
+  // TODO stop button
 
   // Turn on LED on each beat for about 1/16th note duration
   if (currentClockPulse == 1) {
@@ -200,4 +207,8 @@ void sendMidiTransportMessage(byte message) {
 
 boolean playButtonRising() {
   return previousPlayButtonState == LOW && playButtonState == HIGH;
+}
+
+boolean stopButtonRising() {
+  return previousStopButtonState == LOW && stopButtonState == HIGH;
 }
