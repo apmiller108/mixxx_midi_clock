@@ -14,6 +14,16 @@
 
 #include "MIDIUSB.h"
 
+#define DEBUG 0
+
+#if DEBUG == 1
+#define debug(x) Serial.print(x)
+#define debugln(x) Seriali.println(x)
+#else
+#define debug(x)
+#define debugln(x)
+#endif
+
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
 // beat per 1 second)
@@ -80,7 +90,7 @@ void setup() {
 void loop() {
   readMidiUSB();
 
-  // Play button ||>
+  // Play button
   playButtonState = digitalRead(PLAY_BUTTON);
   if (playButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
     if (currentPlayState == STOPPED) {
@@ -97,7 +107,7 @@ void loop() {
   }
   previousPlayButtonState = playButtonState;
 
-  // Stop button []
+  // Stop button
   stopButtonState = digitalRead(STOP_BUTTON);
   if (stopButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
     sendMidiTransportMessage(MIDI_STOP);
@@ -149,14 +159,14 @@ void readMidiUSB() {
   do {
     rx = MidiUSB.read();
     if (rx.header != 0) {
-      /* Serial.print("Received: "); */
-      /* Serial.print(rx.header, HEX); */
-      /* Serial.print("-"); */
-      /* Serial.print(rx.byte1, HEX); */
-      /* Serial.print("-"); */
-      /* Serial.print(rx.byte2, HEX); */
-      /* Serial.print("-"); */
-      /* Serial.println(rx.byte3, HEX); */
+      debug("Received: ");
+      debug(rx.header, HEX);
+      debug("-");
+      debug(rx.byte1, HEX);
+      debug("-");
+      debug(rx.byte2, HEX);
+      debug("-");
+      debugln(rx.byte3, HEX);
 
       if (rx.byte2 == 0x34) {
         // The Mixxx controller script subtracts 50 from the BPM so it fits in a
