@@ -25,6 +25,7 @@ const float DEFAULT_BPM = 120; // Default BPM until read from midi messages from
 const byte MIDI_START = 0xFA;
 const byte MIDI_CONT = 0xFB;
 const byte MIDI_STOP = 0xFC;
+const byte MIDI_CLOCK = 0xF8;
 
 volatile unsigned int timerComparePulseValue;
 volatile int currentClockPulse = 1;
@@ -202,7 +203,7 @@ void readMidiUSB() {
 }
 
 void sendMidiClock() {
-  midiEventPacket_t clockEvent ={0x0F, 0xF8, 0x00, 0x00};
+  midiEventPacket_t clockEvent ={0x0F, MIDI_CLOCK, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
   MidiUSB.flush();
 }
