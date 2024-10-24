@@ -35,8 +35,8 @@ int bpmWhole;
 float bpmFractional;
 bool bpmChanged = false;
 
-const int PLAY_BUTTON = 2; 
-const int STOP_BUTTON = 4; 
+const int PLAY_BUTTON = 2;
+const int STOP_BUTTON = 4;
 enum playState {
   PLAYING,
   PAUSED,
@@ -72,12 +72,13 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
 
   pinMode(PLAY_BUTTON, INPUT);
+  pinMode(STOP_BUTTON, INPUT);
 }
 
 void loop() {
   readMidiUSB();
 
-  // Play button
+  // Play button ||>
   playButtonState = digitalRead(PLAY_BUTTON);
   if (playButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
     if (currentPlayState == STOPPED) {
@@ -94,8 +95,14 @@ void loop() {
   }
   previousPlayButtonState = playButtonState;
 
-  // stop button
-  // TODO stop button
+  // Stop button []
+  stopButtonState = digitalRead(STOP_BUTTON);
+  if (stopButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
+    sendMidiTransportMessage(MIDI_STOP);
+    currentPlayState = STOPPED;
+    lastDebounceTimeMs = millis();
+  }
+  previousStopButtonState = stopButtonState;
 
   // Turn on LED on each beat for about 1/16th note duration
   if (currentClockPulse == 1) {
