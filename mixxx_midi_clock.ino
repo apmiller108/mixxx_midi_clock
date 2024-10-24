@@ -36,7 +36,6 @@ float bpmFractional;
 bool bpmChanged = false;
 
 const int PLAY_BUTTON = 2; // pin 2
-// TODO refactor use enum
 enum playState {
   PLAYING,
   PAUSED,
@@ -72,61 +71,7 @@ void setup() {
 }
 
 void loop() {
-  // TODO refactor: extract this loop to a function
-  do {
-    rx = MidiUSB.read();
-    if (rx.header != 0) {
-      /* Serial.print("Received: "); */
-      /* Serial.print(rx.header, HEX); */
-      /* Serial.print("-"); */
-      /* Serial.print(rx.byte1, HEX); */
-      /* Serial.print("-"); */
-      /* Serial.print(rx.byte2, HEX); */
-      /* Serial.print("-"); */
-      /* Serial.println(rx.byte3, HEX); */
-
-      if (rx.byte2 == 0x34) {
-        // The Mixxx controller script subtracts 50 from the BPM so it fits in a
-        // 0-127 midi range. So, 50 is added to the value to get the actual BPM.
-        bpmWhole = rx.byte3 + 50;
-      }
-
-      if (rx.byte2 == 0x35) {
-        bpmFractional = rx.byte3 / 100.0;
-      }
-
-      float newBpm = bpmWhole + bpmFractional;
-      if (newBpm != bpm) {
-        bpmChanged = true;
-
-        bpm = newBpm;
-        calculateTimerComparePulseValue();
-
-        bpmChanged = false;
-      }
-
-      if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
-        // The beat length for the given bpm in micros
-        unsigned long beatLength =  MICROS_PER_MIN / bpm;
-
-        // beat_distance value from Mixxx is a number between 0 and 1. It
-        // represents the distance from the previous beat marker. It is
-        // multiplied by 127 in order to pass it as a midi value, so it is
-        // divided here in order to get the original float value.
-        float beatDistance = rx.byte3 / 127.0;
-        float distToNextBeat = 1 - beatDistance;
-        if (!receivingMidi) {
-          // Start next pulse when the next beat is predicted to happen
-          // This should only be needed once.
-          // TODO: determine if this is really needed. Maybe not if I can change
-          // the phase manually which probably something I will need to do
-          // anyway.
-          OCR1A += ((beatLength * distToNextBeat) * CPU_FREQ / 256) / 1000000UL;
-          receivingMidi = true;
-        }
-      }
-    }
-  } while (rx.header != 0);
+  readMidiUSB();
 
   // Play button
   playButtonState = digitalRead(PLAY_BUTTON);
@@ -182,6 +127,63 @@ void calculateTimerComparePulseValue() {
 
   // Ensure the compare value fits in 16 bits for Timer1
   timerComparePulseValue = min(timerComparePulseValue, 65535);
+}
+
+void readMidiUSB() {
+  do {
+    rx = MidiUSB.read();
+    if (rx.header != 0) {
+      /* Serial.print("Received: "); */
+      /* Serial.print(rx.header, HEX); */
+      /* Serial.print("-"); */
+      /* Serial.print(rx.byte1, HEX); */
+      /* Serial.print("-"); */
+      /* Serial.print(rx.byte2, HEX); */
+      /* Serial.print("-"); */
+      /* Serial.println(rx.byte3, HEX); */
+
+      if (rx.byte2 == 0x34) {
+        // The Mixxx controller script subtracts 50 from the BPM so it fits in a
+        // 0-127 midi range. So, 50 is added to the value to get the actual BPM.
+        bpmWhole = rx.byte3 + 50;
+      }
+
+      if (rx.byte2 == 0x35) {
+        bpmFractional = rx.byte3 / 100.0;
+      }
+
+      float newBpm = bpmWhole + bpmFractional;
+      if (newBpm != bpm) {
+        bpmChanged = true;
+
+        bpm = newBpm;
+        calculateTimerComparePulseValue();
+
+        bpmChanged = false;
+      }
+
+      if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
+        // The beat length for the given bpm in micros
+        unsigned long beatLength =  MICROS_PER_MIN / bpm;
+
+        // beat_distance value from Mixxx is a number between 0 and 1. It
+        // represents the distance from the previous beat marker. It is
+        // multiplied by 127 in order to pass it as a midi value, so it is
+        // divided here in order to get the original float value.
+        float beatDistance = rx.byte3 / 127.0;
+        float distToNextBeat = 1 - beatDistance;
+        if (!receivingMidi) {
+          // Start next pulse when the next beat is predicted to happen
+          // This should only be needed once.
+          // TODO: determine if this is really needed. Maybe not if I can change
+          // the phase manually which probably something I will need to do
+          // anyway.
+          OCR1A += ((beatLength * distToNextBeat) * CPU_FREQ / 256) / 1000000UL;
+          receivingMidi = true;
+        }
+      }
+    }
+  } while (rx.header != 0);
 }
 
 void sendMidiClock() {
