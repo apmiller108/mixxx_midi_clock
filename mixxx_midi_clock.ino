@@ -37,11 +37,16 @@ bool bpmChanged = false;
 
 const int PLAY_BUTTON = 2; // pin 2
 // TODO refactor use enum
-byte playState = 0; // 0 = stopped, 1 = playing, 2 = paused
+enum playState {
+  PLAYING,
+  PAUSED,
+  STOPPED
+};
+enum playState currentPlayState = STOPPED;
 int playButtonState;
 int previousPlayButtonState = LOW;
 unsigned long lastDebounceTimeMs = 0;
-unsigned long debounceDelayMs = 50;
+unsigned long debounceDelayMs = 75;
 
 midiEventPacket_t rx;
 
@@ -126,19 +131,15 @@ void loop() {
   // Play button
   playButtonState = digitalRead(PLAY_BUTTON);
   if (playButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
-    Serial.println("button pressed");
-    if (playState == 0) { // stopped
-      playState = 1;
+    if (currentPlayState == STOPPED) {
       sendMidiTransportMessage(MIDI_START);
-      Serial.println(playState);
-    } else if (playState == 1) { // playing
+      currentPlayState = PLAYING;
+    } else if (currentPlayState == PLAYING) {
       sendMidiTransportMessage(MIDI_STOP);
-      playState = 2;
-      Serial.println(playState);
-    } else if (playState == 2) { // paused
+      currentPlayState = PAUSED;
+    } else if (currentPlayState == PAUSED) {
       sendMidiTransportMessage(MIDI_CONT);
-      playState = 1;
-      Serial.println(playState);
+      currentPlayState = PLAYING;
     }
     lastDebounceTimeMs = millis();
   }
