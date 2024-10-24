@@ -5,9 +5,10 @@
  * Author: alex miller
  */
 
-// TODO add button to stop
-// TODO add midi jack and write midi clock / transport controls to it
-// TODO test with external drum machine
+// TODO test transport buttons
+// TODO add midi jack
+// TODO write midi clock / transport controls to serial midi jack
+// TODO test with external gear
 // TODO add encoder to change the phase
 // TODO add screen to display bpm, phase offset, and transport state
 
