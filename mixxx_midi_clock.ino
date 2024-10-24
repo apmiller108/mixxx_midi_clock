@@ -21,6 +21,10 @@ const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
 const float DEFAULT_BPM = 120; // Default BPM until read from midi messages from Mixxx
 
+const byte MIDI_START = 0xFA;
+const byte MIDI_CONT = 0xFB;
+const byte MIDI_STOP = 0xFC;
+
 volatile unsigned int timerComparePulseValue;
 volatile int currentClockPulse = 1;
 
@@ -112,7 +116,7 @@ void loop() {
           // TODO: determine if this is really needed. Maybe not if I can change
           // the phase manually which probably something I will need to do
           // anyway.
-          OCR1A += ((beatLength * distToNextBeat) * CPU_FREQ / 256) / 1000000UL
+          OCR1A += ((beatLength * distToNextBeat) * CPU_FREQ / 256) / 1000000UL;
           receivingMidi = true;
         }
       }
@@ -125,14 +129,14 @@ void loop() {
     Serial.println("button pressed");
     if (playState == 0) { // stopped
       playState = 1;
-      sendMidiStart();
+      sendMidiTransportMessage(MIDI_START);
       Serial.println(playState);
     } else if (playState == 1) { // playing
-      // TODO send stop message
+      sendMidiTransportMessage(MIDI_STOP);
       playState = 2;
       Serial.println(playState);
     } else if (playState == 2) { // paused
-      // TODO send continue
+      sendMidiTransportMessage(MIDI_CONT);
       playState = 1;
       Serial.println(playState);
     }
@@ -179,16 +183,15 @@ void calculateTimerComparePulseValue() {
   timerComparePulseValue = min(timerComparePulseValue, 65535);
 }
 
-// TODO refactor: extract sendMidiTransportMsg method
 void sendMidiClock() {
   midiEventPacket_t clockEvent ={0x0F, 0xF8, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
   MidiUSB.flush();
 }
 
-void sendMidiStart() {
-  midiEventPacket_t clockEvent ={0x0F, 0xFA, 0x00, 0x00};
-  MidiUSB.sendMIDI(clockEvent);
+void sendMidiTransportMessage(byte message) {
+  midiEventPacket_t transportEvent ={0x0F, message, 0x00, 0x00};
+  MidiUSB.sendMIDI(transportEvent);
   MidiUSB.flush();
 }
 
