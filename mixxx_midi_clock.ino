@@ -40,6 +40,10 @@ const byte MIDI_CLOCK = 0xF8;
 volatile unsigned int timerComparePulseValue;
 volatile int currentClockPulse = 1;
 
+// TODO: possible clock improvement
+// initialize currentFlag to false
+// initialize previousFlag to false
+
 bool receivingMidi = false;
 
 float bpm = 0;
@@ -66,7 +70,7 @@ unsigned long debounceDelayMs = 75;
 midiEventPacket_t rx;
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(31250);
   // Set up Timer1
   TCCR1A = 0; // Control Register A
   TCCR1B = 0; // Control Register B
@@ -131,6 +135,11 @@ ISR(TIMER1_COMPA_vect) {
 
   sendMidiClock();
 
+  // TODO: possible clock improvement
+  // If the currentFlag is true or HAS_RISEN
+  // set the previousFlag to currentFlag
+  // Set the currentFlag to false
+
   // Keep track of the pulse count. Integer in the range 1..24.
   if (currentClockPulse < PPQ) {
     currentClockPulse++;
@@ -156,6 +165,13 @@ void calculateTimerComparePulseValue() {
 }
 
 void readMidiUSB() {
+  // TODO: possible clock improvement
+  // if the previousFlag was true but the currentFlag if false (FALLING or HAS_FALLEN)
+  // 1. pause interrupts
+  // 2. configure clock / prescaler based on bpm
+  // 3. call calculateTimerComparePulseValue()
+  // 4. reenable interrupts
+  // 5. set previousFlag state to currentFlag
   do {
     rx = MidiUSB.read();
     if (rx.header != 0) {
@@ -204,6 +220,12 @@ void readMidiUSB() {
           // TODO: determine if this is really needed. Maybe not if I can change
           // the phase manually which probably something I will need to do
           // anyway.
+          // TODO: possible clock improvement
+          // 1. pause interrupt
+          // 2. configure prescaler based on the period
+          // 3. set OCR1A
+          // 4. unpause interrupt
+          // 5. set currentFlag to true
           OCR1A += ((beatLength * distToNextBeat) * CPU_FREQ / 256) / 1000000UL;
           receivingMidi = true;
         }
@@ -213,12 +235,14 @@ void readMidiUSB() {
 }
 
 void sendMidiClock() {
+  Serial.write(MIDI_CLOCK);
   midiEventPacket_t clockEvent ={0x0F, MIDI_CLOCK, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
   MidiUSB.flush();
 }
 
 void sendMidiTransportMessage(byte message) {
+  Serial.write(message);
   midiEventPacket_t transportEvent ={0x0F, message, 0x00, 0x00};
   MidiUSB.sendMIDI(transportEvent);
   MidiUSB.flush();
