@@ -6,13 +6,15 @@
  */
 
 // TODO test transport buttons
-// TODO add midi jack
 // TODO write midi clock / transport controls to serial midi jack
 // TODO test with external gear
 // TODO add encoder to change the phase
 // TODO add screen to display bpm, phase offset, and transport state
 
 #include "MIDIUSB.h"
+#include <MIDI.h>
+
+MIDI_CREATE_DEFAULT_INSTANCE();
 
 #define DEBUG 0
 
@@ -30,7 +32,7 @@ const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 const unsigned long MAX_CLOCK_TIME = 1000000;
 const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
-const float DEFAULT_BPM = 120; // Default BPM until read from midi messages from Mixxx
+const float DEFAULT_BPM = 138.5; // Default BPM until read from midi messages from Mixxx
 
 const byte MIDI_START = 0xFA;
 const byte MIDI_CONT = 0xFB;
@@ -70,7 +72,7 @@ unsigned long debounceDelayMs = 75;
 midiEventPacket_t rx;
 
 void setup() {
-  Serial.begin(31250);
+  MIDI.begin(MIDI_CHANNEL_OMNI);
   // Set up Timer1
   TCCR1A = 0; // Control Register A
   TCCR1B = 0; // Control Register B
@@ -176,13 +178,13 @@ void readMidiUSB() {
     rx = MidiUSB.read();
     if (rx.header != 0) {
       debug("Received: ");
-      debug(rx.header, HEX);
+      debug(rx.header);
       debug("-");
-      debug(rx.byte1, HEX);
+      debug(rx.byte1);
       debug("-");
-      debug(rx.byte2, HEX);
+      debug(rx.byte2);
       debug("-");
-      debugln(rx.byte3, HEX);
+      debugln(rx.byte3);
 
       if (rx.byte2 == 0x34) {
         // The Mixxx controller script subtracts 50 from the BPM so it fits in a
@@ -235,14 +237,14 @@ void readMidiUSB() {
 }
 
 void sendMidiClock() {
-  Serial.write(MIDI_CLOCK);
+  MIDI.sendRealTime(midi::Clock);
   midiEventPacket_t clockEvent ={0x0F, MIDI_CLOCK, 0x00, 0x00};
   MidiUSB.sendMIDI(clockEvent);
   MidiUSB.flush();
 }
 
 void sendMidiTransportMessage(byte message) {
-  Serial.write(message);
+  MIDI.sendRealTime(message);
   midiEventPacket_t transportEvent ={0x0F, message, 0x00, 0x00};
   MidiUSB.sendMIDI(transportEvent);
   MidiUSB.flush();
