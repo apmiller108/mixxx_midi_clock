@@ -5,8 +5,8 @@
  * Author: alex miller
  */
 
-// TODO dynaically configure the clock
-// TODO When pressing play, stop interrupts, send play msg, send midi clock, reset clock, set period and restart interrupts
+// TODO When pressing play, stop interrupts, send play msg, send midi clock,
+// reset clock, set period and restart interrupts
 // TODO test with external gear
 // TODO add encoder to change the phase
 // TODO add screen to display bpm, phase offset, and transport state
@@ -33,19 +33,20 @@ const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // beat per 1 second)
 const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
-const float DEFAULT_BPM = 138.5; // Default BPM until read from midi messages from Mixxx
+const float DEFAULT_BPM = 122; // Default BPM until read from midi messages from Mixxx
 
 const byte MIDI_START = 0xFA;
 const byte MIDI_CONT = 0xFB;
 const byte MIDI_STOP = 0xFC;
 const byte MIDI_CLOCK = 0xF8;
 
-unsigned int intervalUS;
+
+// TODO extract enum
+// 0 free, 1 syncing to mixxx, 2 syncing to mixxx complete, 3 synced to mixxx
+volatile byte clockStatus = 0; 
 volatile int currentClockPulse = 1;
 
 bool receivingMidi = false;
-
-byte clockStatus = 0; // 0 free, 1 syncing to mixxx, 2 syncing to mixxx complete, 3 synced to mixxx
 
 float bpm = 0;
 int bpmWhole;
@@ -70,38 +71,36 @@ unsigned long debounceDelayMs = 75;
 midiEventPacket_t rx;
 
 void setup() {
-  Serial.begin(31250);
+  /* Serial.begin(31250); */
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
-  bpmToIntervalUS(DEFAULT_BPM);
-  Serial.println(intervalUS);
-  unsigned int ocr = (CPU_FREQ * intervalUS / (8 * 1000000));
+  float intervalMicros = bpmToIntervalUS(DEFAULT_BPM);
+  unsigned long ocr = (CPU_FREQ * intervalMicros / (8 * 1000000)) + 0.5;
   CONFIGURE_TIMER1(
-                   TCCR1A = 0; // Control Register A
-                   TCCR1B = 0; // Control Register B
-                   TCNT1  = 0; // initialize counter value to 0
-                   TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8
+    TCCR1A = 0; // Control Register A
+    TCCR1B = 0; // Control Register B
+    TCNT1  = 0; // initialize counter value to 0
+    TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8
 
-                   // Set tick that triggers the interrupt
-                   OCR1A = ocr;
-                   // Enable Clear Time on Compare match
-                   TCCR1B |= (1 << WGM12);
+    // Set tick that triggers the interrupt
+    OCR1A = ocr;
+    // Enable Clear Time on Compare match
+    TCCR1B |= (1 << WGM12);
 
-                   // Enable timer overflow interrupt
-                   TIMSK1 |= (1 << OCIE1A);
-                   )
+    // Enable timer overflow interrupt
+    TIMSK1 |= (1 << OCIE1A);
+   )
 
-    pinMode(LED_BUILTIN, OUTPUT);
-
+  pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
 }
 
 void loop() {
-  Serial.println(currentClockPulse);
   if (clockStatus == 2) { // SYNC COMPLETE
-    configureTimer(intervalUS); // configure timer with 24 ppq intervalUS based on BPM from Mixxx
+    // configure timer with 24 ppq intervalMicros based on BPM from Mixxx
+    configureTimer(bpmToIntervalUS(bpm)); 
     clockStatus = 3; // SYNCED
   }
 
@@ -147,7 +146,7 @@ ISR(TIMER1_COMPA_vect) {
   sendMidiClock();
 
   if (clockStatus == 1) { // SYNCING
-    clockStatus == 2; // SYNC COMPLETE
+    clockStatus = 2; // SYNC COMPLETE
   }
 
   // Keep track of the pulse count (PPQ)
@@ -159,38 +158,40 @@ ISR(TIMER1_COMPA_vect) {
 }
 
 float bpmToIntervalUS(float bpm) {
-  intervalUS = MICROS_PER_MIN / bpm / PPQ;
+  return MICROS_PER_MIN / bpm / PPQ;
 }
 
-void configureTimer(float intervalUS) {
-  unsigned int ocr;
+void configureTimer(float intervalMicros) {
+  unsigned long ocr;
   byte tccr;
 
   // Configure prescaler (1, 8, 64, 256, or 1024) based on the required PPQ
   // interval for the given bpm. Calculate the timer compare value for each
   // prescaler to see if it fits in Timer1's 16 bytes. MS to S via * 1M. Adds
   // 0.5 to ensure conversion to int rounds up or down appropriately.
-  if ((ocr = ((CPU_FREQ * intervalUS / (1 * 1000000)) + 0.5)) < 65535) {
+  if ((ocr = ((CPU_FREQ * intervalMicros / (1 * 1000000)) + 0.5)) < 65535) {
     tccr |= (0 << CS12) | (0 << CS11) | (1 << CS10);
-  } else if ((ocr = ((CPU_FREQ * intervalUS / (8 * 1000000)) + 0.5)) < 65535) {
+  } else if ((ocr = ((CPU_FREQ * intervalMicros / (8 * 1000000)) + 0.5)) < 65535) {
     tccr |= (0 << CS12) | (1 << CS11) | (0 << CS10);
-  } else if ((ocr = ((CPU_FREQ * intervalUS / (64 * 1000000)) + 0.5)) < 65535) {
+  } else if ((ocr = ((CPU_FREQ * intervalMicros / (64 * 1000000)) + 0.5)) < 65535) {
     tccr |= (0 << CS12) | (1 << CS11) | (1 << CS10);
-  } else if ((ocr = ((CPU_FREQ * intervalUS / (256 * 1000000)) + 0.5)) < 65535) {
+  } else if ((ocr = ((CPU_FREQ * intervalMicros / (256 * 1000000)) + 0.5)) < 65535) {
     tccr |= (1 << CS12) | (0 << CS11) | (0 << CS10);
-  } else if ((ocr = ((CPU_FREQ * intervalUS / (1024 * 1000000)) + 0.5)) < 65535) {
+  } else if ((ocr = ((CPU_FREQ * intervalMicros / (1024 * 1000000)) + 0.5)) < 65535) {
     tccr |= (1 << CS12) | (0 << CS11) | (1 << CS10);
   } else {
-    // bpm is slow. Exceeds timer's maximum ticks.
+    // bpm is too slow. Exceeds timer's maximum ticks.
     return;
   }
 
-  CONFIGURE_TIMER1(
-    TCCR1B = 0;
-    OCR1A = ocr;
-    TCCR1B |= (1 << WGM12);
-    TCCR1B |= tccr;
-  )
+  if (ocr) {
+    CONFIGURE_TIMER1(
+      TCCR1B = 0;
+      OCR1A = ocr;
+      TCCR1B |= (1 << WGM12);
+      TCCR1B |= tccr;
+    )
+  }
 }
 
 void readMidiUSB() {
@@ -219,11 +220,11 @@ void readMidiUSB() {
       float newBpm = bpmWhole + bpmFractional;
       if (newBpm != bpm) {
         bpm = newBpm;
-        bpmToIntervalUS(bpm);
-      }
+        float intervalMicros = bpmToIntervalUS(bpm);
 
-      if (clockStatus == 3) {
-        configureTimer(intervalUS);
+        if (clockStatus == 3) {
+          configureTimer(intervalMicros);
+        }
       }
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
@@ -244,8 +245,8 @@ void readMidiUSB() {
           // The beat length for the given bpm in micros
           unsigned long beatLength =  MICROS_PER_MIN / bpm;
 
-          // Next tick starts in the the time in US to get to the next beat minus 24 ticks
-          unsigned int startIn = (beatLength * beatDistance) - (24 * intervalUS);
+          // Next tick starts in the in micro seconds to the next beat 
+          float startIn = (beatLength * beatDistance);
           configureTimer(startIn);
           currentClockPulse = 1;
           clockStatus = 1; // SYNCING
