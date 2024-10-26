@@ -5,8 +5,8 @@
  * Author: alex miller
  */
 
-// TODO test transport buttons
-// TODO write midi clock / transport controls to serial midi jack
+// TODO dynaically configure the clock
+// TODO When pressing play, stop interrupts, send play msg, send midi clock, reset clock, set period and restart interrupts
 // TODO test with external gear
 // TODO add encoder to change the phase
 // TODO add screen to display bpm, phase offset, and transport state
@@ -25,6 +25,8 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #define debug(x)
 #define debugln(x)
 #endif
+
+#define CONFIGURE_TIMER1(X) noInterrupts(); X; interrupts()
 
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
@@ -74,16 +76,27 @@ midiEventPacket_t rx;
 void setup() {
   MIDI.begin(MIDI_CHANNEL_OMNI);
   // Set up Timer1
-  TCCR1A = 0; // Control Register A
-  TCCR1B = 0; // Control Register B
-  TCCR1B |= B00000100; // Prescaler = 256
-
-  // Compute the compare value (pulse length) and assign it to the Compare A
-  // Register.
   calculateTimerComparePulseValue();
-  OCR1A = timerComparePulseValue;
 
-  TIMSK1 |= B00000010; // Enable timer overflow interrupt
+  CONFIGURE_TIMER1(
+    TCCR1A = 0; // Control Register A
+    TCCR1B = 0; // Control Register B
+    TCNT1  = 0; // initialize counter value to 0
+    /* TCCR1B |= (1 << CS12) | (1 << CS10); // Prescaler 1024 */
+    /* TCCR1B |= (0 << CS12) | (0 << CS11) | (1 << CS10); Prescaler 1 */
+    TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8
+    /* TCCR1B |= (0 << CS12) | (1 << CS11) | (1 << CS10); // Prescaler 64 */
+    /* TCCR1B |= (1 << CS12) | (0 << CS11) | (0 << CS10); // Prescaler 256 */
+    /* TCCR1B |= (1 << CS12) | (0 << CS11) | (1 << CS10); // Prescaler 1024 */
+
+    // Compute the compare value (pulse length) and assign it to the Compare A
+    // Register.
+    OCR1A = timerComparePulseValue;
+    // Enable Clear Time on Compare match.
+    TCCR1B |= (1 << WGM12);
+
+    TIMSK1 |= (1 << OCIE1A); // Enable timer overflow interrupt
+  );
 
   // Setup beat pulse LED. This LED will pulse on each beat (eg, first of every
   // 24 pulses).
@@ -133,7 +146,7 @@ void loop() {
 // Timer1 COMPA interrupt function
 ISR(TIMER1_COMPA_vect) {
   // Schedule the next interrupt
-  OCR1A += timerComparePulseValue;
+  /* OCR1A += timerComparePulseValue; */
 
   sendMidiClock();
 
@@ -154,13 +167,10 @@ void calculateTimerComparePulseValue() {
   // Use the DEFAULT_BPM to generate the clock until bpm is set from midi
   // messages from Mixxx
   float currentBpm = (bpm > 0) ? bpm : DEFAULT_BPM;
-  unsigned long pulsePeriod = (MICROS_PER_MIN / currentBpm) / PPQ;
-  pulsePeriod = min(pulsePeriod, MAX_CLOCK_TIME);  // Ensure we don't exceed max clock time
+  float pulsePeriod = (MICROS_PER_MIN / currentBpm) / PPQ;
 
   // Calculate the timer compare value
-  // Timer clock = CPU clock / prescaler
-  unsigned long timerClock = CPU_FREQ / 256;
-  timerComparePulseValue = (pulsePeriod * timerClock) / 1000000UL;
+  timerComparePulseValue =  (CPU_FREQ * pulsePeriod / (8 * 1000000));
 
   // Ensure the compare value fits in 16 bits for Timer1
   timerComparePulseValue = min(timerComparePulseValue, 65535);
