@@ -72,18 +72,18 @@ midiEventPacket_t rx;
 void setup() {
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
-  // Configure Timer1 with defaults
+  // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
   bpmToIntervalUS(DEFAULT_BPM);
   unsigned int ocr = ((CPU_FREQ * intervalUS / (8 * 1000000)) + 0.5)
   CONFIGURE_TIMER1(
     TCCR1A = 0; // Control Register A
     TCCR1B = 0; // Control Register B
     TCNT1  = 0; // initialize counter value to 0
-    TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8 for DEFAULT_BPM
+    TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8
 
-    // Set interrupt tick
+    // Set tick that triggers the interrupt
     OCR1A = ocr;
-    // Enable Clear Time on Compare match.
+    // Enable Clear Time on Compare match
     TCCR1B |= (1 << WGM12);
 
     // Enable timer overflow interrupt
