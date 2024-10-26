@@ -40,19 +40,16 @@ const byte MIDI_CONT = 0xFB;
 const byte MIDI_STOP = 0xFC;
 const byte MIDI_CLOCK = 0xF8;
 
-volatile unsigned int timerComparePulseValue;
+unsigned int intervalUS;
 volatile int currentClockPulse = 1;
 
-// TODO: possible clock improvement
-// initialize currentFlag to false
-// initialize previousFlag to false
-
 bool receivingMidi = false;
+
+byte clockStatus = 0; // 0 free, 1 syncing to mixxx, 2 syncing to mixxx complete, 3 synced to mixxx
 
 float bpm = 0;
 int bpmWhole;
 float bpmFractional;
-bool bpmChanged = false;
 
 const int PLAY_BUTTON = 2;
 const int STOP_BUTTON = 4;
@@ -74,31 +71,25 @@ midiEventPacket_t rx;
 
 void setup() {
   MIDI.begin(MIDI_CHANNEL_OMNI);
-  // Set up Timer1
-  calculateTimerComparePulseValue();
 
+  // Configure Timer1 with defaults
+  bpmToIntervalUS(DEFAULT_BPM);
+  unsigned int ocr = ((CPU_FREQ * intervalUS / (8 * 1000000)) + 0.5)
   CONFIGURE_TIMER1(
     TCCR1A = 0; // Control Register A
     TCCR1B = 0; // Control Register B
     TCNT1  = 0; // initialize counter value to 0
-    /* TCCR1B |= (1 << CS12) | (1 << CS10); // Prescaler 1024 */
-    /* TCCR1B |= (0 << CS12) | (0 << CS11) | (1 << CS10); Prescaler 1 */
-    TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8
-    /* TCCR1B |= (0 << CS12) | (1 << CS11) | (1 << CS10); // Prescaler 64 */
-    /* TCCR1B |= (1 << CS12) | (0 << CS11) | (0 << CS10); // Prescaler 256 */
-    /* TCCR1B |= (1 << CS12) | (0 << CS11) | (1 << CS10); // Prescaler 1024 */
+    TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8 for DEFAULT_BPM
 
-    // Compute the compare value (pulse length) and assign it to the Compare A
-    // Register.
-    OCR1A = timerComparePulseValue;
+    // Set interrupt tick
+    OCR1A = ocr;
     // Enable Clear Time on Compare match.
     TCCR1B |= (1 << WGM12);
 
-    TIMSK1 |= (1 << OCIE1A); // Enable timer overflow interrupt
+    // Enable timer overflow interrupt
+    TIMSK1 |= (1 << OCIE1A);
   );
 
-  // Setup beat pulse LED. This LED will pulse on each beat (eg, first of every
-  // 24 pulses).
   pinMode(LED_BUILTIN, OUTPUT);
 
   pinMode(PLAY_BUTTON, INPUT);
@@ -106,6 +97,11 @@ void setup() {
 }
 
 void loop() {
+  if (clockStatus == 2) {
+    configureTimer(intervalUS);
+    clockStatus = 3;
+  }
+
   readMidiUSB();
 
   // Play button
@@ -134,6 +130,7 @@ void loop() {
   }
   previousStopButtonState = stopButtonState;
 
+  // TODO fix this. Consider longer blinks on the 1 beat of each measure (assume 4/4)
   // Turn on LED on each beat for about 1/16th note duration
   if (currentClockPulse == 1) {
     digitalWrite(LED_BUILTIN, HIGH);
@@ -146,10 +143,9 @@ void loop() {
 ISR(TIMER1_COMPA_vect) {
   sendMidiClock();
 
-  // TODO: possible clock improvement
-  // If the currentFlag is true or HAS_RISEN
-  // set the previousFlag to currentFlag
-  // Set the currentFlag to false
+  if (clockStatus == 1) {
+    clockStatus == 2;
+  }
 
   // Keep track of the pulse count (PPQ)
   if (currentClockPulse < PPQ) {
@@ -159,28 +155,42 @@ ISR(TIMER1_COMPA_vect) {
   }
 }
 
-void calculateTimerComparePulseValue() {
-  // Use the DEFAULT_BPM to generate the clock until bpm is set from midi
-  // messages from Mixxx
-  float currentBpm = (bpm > 0) ? bpm : DEFAULT_BPM;
-  float pulsePeriod = (MICROS_PER_MIN / currentBpm) / PPQ;
+float bpmToIntervalUS(float bpm) {
+  intervalUS = MICROS_PER_MIN / bpm) / PPQ;
+}
 
-  // Calculate the timer compare value. MS to S via * 1M. Adds 0.5 to ensure
-  // conversion to int rounds up or down appropriately.
-  timerComparePulseValue =  ((CPU_FREQ * pulsePeriod / (8 * 1000000)) + 0.5)
+void configureTimer(float intervalUS) {
+  unsigned int ocr;
+  byte tccr;
 
-  // Ensure the compare value fits in 16 bits for Timer1
-  timerComparePulseValue = min(timerComparePulseValue, 65535);
+  // Configure prescaler (1, 8, 64, 256, or 1024) based on the required PPQ
+  // interval for the given bpm. Calculate the timer compare value for each
+  // prescaler to see if it fits in Timer1's 16 bytes. MS to S via * 1M. Adds
+  // 0.5 to ensure conversion to int rounds up or down appropriately.
+  if ((ocr = ((CPU_FREQ * intervalUS / (1 * 1000000)) + 0.5)) < 65535) {
+    tccr |= (0 << CS12) | (0 << CS11) | (1 << CS10);
+  } else if ((ocr = ((CPU_FREQ * intervalUS / (8 * 1000000)) + 0.5)) < 65535) {
+    tccr |= (0 << CS12) | (1 << CS11) | (0 << CS10);
+  } else if ((ocr = ((CPU_FREQ * intervalUS / (64 * 1000000)) + 0.5)) < 65535) {
+    tccr |= (0 << CS12) | (1 << CS11) | (1 << CS10);
+  } else if ((ocr = ((CPU_FREQ * intervalUS / (256 * 1000000)) + 0.5)) < 65535) {
+    tccr |= (1 << CS12) | (0 << CS11) | (0 << CS10);
+  } else if ((ocr = ((CPU_FREQ * intervalUS / (1024 * 1000000)) + 0.5)) < 65535) {
+    tccr |= (1 << CS12) | (0 << CS11) | (1 << CS10);
+  } else {
+    // bpm is slow. Exceeds timer's maximum ticks.
+    return;
+  }
+
+  CONFIGURE_TIMER1(
+    TCCR1B = 0;
+    OCR1A = ocr;
+    TCCR1B |= (1 << WGM12);
+    TCCR1B |= tccr;
+  )
 }
 
 void readMidiUSB() {
-  // TODO: possible clock improvement
-  // if the previousFlag was true but the currentFlag if false (FALLING or HAS_FALLEN)
-  // 1. pause interrupts
-  // 2. configure clock / prescaler based on bpm
-  // 3. call calculateTimerComparePulseValue()
-  // 4. reenable interrupts
-  // 5. set previousFlag state to currentFlag
   do {
     rx = MidiUSB.read();
     if (rx.header != 0) {
@@ -205,12 +215,12 @@ void readMidiUSB() {
 
       float newBpm = bpmWhole + bpmFractional;
       if (newBpm != bpm) {
-        bpmChanged = true;
-
         bpm = newBpm;
-        calculateTimerComparePulseValue();
+        bpmToIntervalUS();
+      }
 
-        bpmChanged = false;
+      if (clockStatus == 3) {
+        configureTimer(intervalUS);
       }
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
@@ -229,13 +239,13 @@ void readMidiUSB() {
           // TODO: determine if this is really needed. Maybe not if I can change
           // the phase manually which probably something I will need to do
           // anyway.
-          // TODO: possible clock improvement
-          // 1. pause interrupt
-          // 2. configure prescaler based on the period
-          // 3. set OCR1A
-          // 4. unpause interrupt
-          // 5. set currentFlag to true
-          OCR1A += ((beatLength * distToNextBeat) * CPU_FREQ / 256) / 1000000UL;
+
+          // Next tick starts in the the time in US to get to the next beat minus 24 ticks
+          unsigned int startIn = (beatLength * distToNextBeat) - (24 * intervalUS);
+          configureTimer(startIn);
+          currentClockPulse = 1;
+          clockStatus = 1;
+
           receivingMidi = true;
         }
       }
