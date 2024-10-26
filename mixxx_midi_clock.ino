@@ -97,9 +97,9 @@ void setup() {
 }
 
 void loop() {
-  if (clockStatus == 2) {
-    configureTimer(intervalUS);
-    clockStatus = 3;
+  if (clockStatus == 2) { // SYNC COMPLETE
+    configureTimer(intervalUS); // configure timer with 24 ppq intervalUS based on BPM from Mixxx
+    clockStatus = 3; // SYNCED
   }
 
   readMidiUSB();
@@ -130,9 +130,9 @@ void loop() {
   }
   previousStopButtonState = stopButtonState;
 
-  // TODO fix this. Consider longer blinks on the 1 beat of each measure (assume 4/4)
+  // TODO Consider longer blinks on the 1 beat of each measure (assume 4/4). Keeps a count of 1..96.
   // Turn on LED on each beat for about 1/16th note duration
-  if (currentClockPulse == 1) {
+  if (currentClockPulse == 24) {
     digitalWrite(LED_BUILTIN, HIGH);
   } else if (currentClockPulse == 6) {
     digitalWrite(LED_BUILTIN, LOW);
@@ -143,8 +143,8 @@ void loop() {
 ISR(TIMER1_COMPA_vect) {
   sendMidiClock();
 
-  if (clockStatus == 1) {
-    clockStatus == 2;
+  if (clockStatus == 1) { // SYNCING
+    clockStatus == 2; // SYNC COMPLETE
   }
 
   // Keep track of the pulse count (PPQ)
@@ -224,27 +224,28 @@ void readMidiUSB() {
       }
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
-        // The beat length for the given bpm in micros
-        unsigned long beatLength =  MICROS_PER_MIN / bpm;
-
-        // beat_distance value from Mixxx is a number between 0 and 1. It
-        // represents the distance from the previous beat marker. It is
-        // multiplied by 127 in order to pass it as a midi value, so it is
-        // divided here in order to get the original float value.
-        float beatDistance = rx.byte3 / 127.0;
-        float distToNextBeat = 1 - beatDistance;
         if (!receivingMidi) {
-          // Start next pulse when the next beat is predicted to happen
-          // This should only be needed once.
           // TODO: determine if this is really needed. Maybe not if I can change
           // the phase manually which probably something I will need to do
           // anyway.
 
+
+          // Start next pulse when the next beat is predicted to happen
+          // This should only be needed once.
+
+          // beat_distance value from Mixxx is a number between 0 and 1. It
+          // represents the distance from the previous beat marker. It is
+          // multiplied by 127 in order to pass it as a midi value, so it is
+          // divided here in order to get the original float value.
+          float beatDistance = 1 - (rx.byte3 / 127.0)
+          // The beat length for the given bpm in micros
+          unsigned long beatLength =  MICROS_PER_MIN / bpm;
+
           // Next tick starts in the the time in US to get to the next beat minus 24 ticks
-          unsigned int startIn = (beatLength * distToNextBeat) - (24 * intervalUS);
+          unsigned int startIn = (beatLength * beatDistance) - (24 * intervalUS);
           configureTimer(startIn);
           currentClockPulse = 1;
-          clockStatus = 1;
+          clockStatus = 1; // SYNCING
 
           receivingMidi = true;
         }
