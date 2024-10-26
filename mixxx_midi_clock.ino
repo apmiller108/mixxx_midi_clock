@@ -31,7 +31,6 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
 // beat per 1 second)
-const unsigned long MAX_CLOCK_TIME = 1000000;
 const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
 const float DEFAULT_BPM = 138.5; // Default BPM until read from midi messages from Mixxx
@@ -145,9 +144,6 @@ void loop() {
 
 // Timer1 COMPA interrupt function
 ISR(TIMER1_COMPA_vect) {
-  // Schedule the next interrupt
-  /* OCR1A += timerComparePulseValue; */
-
   sendMidiClock();
 
   // TODO: possible clock improvement
@@ -155,7 +151,7 @@ ISR(TIMER1_COMPA_vect) {
   // set the previousFlag to currentFlag
   // Set the currentFlag to false
 
-  // Keep track of the pulse count. Integer in the range 1..24.
+  // Keep track of the pulse count (PPQ)
   if (currentClockPulse < PPQ) {
     currentClockPulse++;
   } else if (currentClockPulse == PPQ) {
@@ -169,8 +165,9 @@ void calculateTimerComparePulseValue() {
   float currentBpm = (bpm > 0) ? bpm : DEFAULT_BPM;
   float pulsePeriod = (MICROS_PER_MIN / currentBpm) / PPQ;
 
-  // Calculate the timer compare value
-  timerComparePulseValue =  (CPU_FREQ * pulsePeriod / (8 * 1000000));
+  // Calculate the timer compare value. MS to S via * 1M. Adds 0.5 to ensure
+  // conversion to int rounds up or down appropriately.
+  timerComparePulseValue =  ((CPU_FREQ * pulsePeriod / (8 * 1000000)) + 0.5)
 
   // Ensure the compare value fits in 16 bits for Timer1
   timerComparePulseValue = min(timerComparePulseValue, 65535);
