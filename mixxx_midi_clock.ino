@@ -26,7 +26,7 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #define debugln(x)
 #endif
 
-#define CONFIGURE_TIMER1(X) noInterrupts(); X; interrupts()
+#define CONFIGURE_TIMER1(X) noInterrupts(); X; interrupts();
 
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
@@ -70,33 +70,36 @@ unsigned long debounceDelayMs = 75;
 midiEventPacket_t rx;
 
 void setup() {
+  Serial.begin(31250);
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
   bpmToIntervalUS(DEFAULT_BPM);
-  unsigned int ocr = ((CPU_FREQ * intervalUS / (8 * 1000000)) + 0.5)
+  Serial.println(intervalUS);
+  unsigned int ocr = (CPU_FREQ * intervalUS / (8 * 1000000));
   CONFIGURE_TIMER1(
-    TCCR1A = 0; // Control Register A
-    TCCR1B = 0; // Control Register B
-    TCNT1  = 0; // initialize counter value to 0
-    TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8
+                   TCCR1A = 0; // Control Register A
+                   TCCR1B = 0; // Control Register B
+                   TCNT1  = 0; // initialize counter value to 0
+                   TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8
 
-    // Set tick that triggers the interrupt
-    OCR1A = ocr;
-    // Enable Clear Time on Compare match
-    TCCR1B |= (1 << WGM12);
+                   // Set tick that triggers the interrupt
+                   OCR1A = ocr;
+                   // Enable Clear Time on Compare match
+                   TCCR1B |= (1 << WGM12);
 
-    // Enable timer overflow interrupt
-    TIMSK1 |= (1 << OCIE1A);
-  );
+                   // Enable timer overflow interrupt
+                   TIMSK1 |= (1 << OCIE1A);
+                   )
 
-  pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(LED_BUILTIN, OUTPUT);
 
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
 }
 
 void loop() {
+  Serial.println(currentClockPulse);
   if (clockStatus == 2) { // SYNC COMPLETE
     configureTimer(intervalUS); // configure timer with 24 ppq intervalUS based on BPM from Mixxx
     clockStatus = 3; // SYNCED
@@ -156,7 +159,7 @@ ISR(TIMER1_COMPA_vect) {
 }
 
 float bpmToIntervalUS(float bpm) {
-  intervalUS = MICROS_PER_MIN / bpm) / PPQ;
+  intervalUS = MICROS_PER_MIN / bpm / PPQ;
 }
 
 void configureTimer(float intervalUS) {
@@ -216,7 +219,7 @@ void readMidiUSB() {
       float newBpm = bpmWhole + bpmFractional;
       if (newBpm != bpm) {
         bpm = newBpm;
-        bpmToIntervalUS();
+        bpmToIntervalUS(bpm);
       }
 
       if (clockStatus == 3) {
@@ -237,7 +240,7 @@ void readMidiUSB() {
           // represents the distance from the previous beat marker. It is
           // multiplied by 127 in order to pass it as a midi value, so it is
           // divided here in order to get the original float value.
-          float beatDistance = 1 - (rx.byte3 / 127.0)
+          float beatDistance = 1 - (rx.byte3 / 127.0);
           // The beat length for the given bpm in micros
           unsigned long beatLength =  MICROS_PER_MIN / bpm;
 
