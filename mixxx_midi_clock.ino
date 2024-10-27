@@ -5,8 +5,8 @@
  * Author: alex miller
  */
 
-// TODO When pressing play, stop interrupts, send play msg, send midi clock,
-// reset clock, set period and restart interrupts
+// TODO When pressing play, stop interrupts, send play msg, (maybe send midi clock and increment counter)
+// reset Timer1 clock to 0 and restart interrupts (this changes the phase)
 // TODO test with external gear
 // TODO add encoder to change the phase
 // TODO add screen to display bpm, phase offset, and transport state
@@ -26,7 +26,7 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #define debugln(x)
 #endif
 
-#define CONFIGURE_TIMER1(X) noInterrupts(); X; interrupts();
+#define CONFIGURE_TIMER1(X) cli(); X; sei();
 
 const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
 // 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
@@ -43,7 +43,7 @@ const byte MIDI_CLOCK = 0xF8;
 
 // TODO extract enum
 // 0 free, 1 syncing to mixxx, 2 syncing to mixxx complete, 3 synced to mixxx
-volatile byte clockStatus = 0; 
+volatile byte clockStatus = 0;
 volatile int currentClockPulse = 1;
 
 bool receivingMidi = false;
@@ -79,7 +79,7 @@ void setup() {
   unsigned long ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000);
   CONFIGURE_TIMER1(
     TCCR1A = 0; // Control Register A
-    TCCR1B = 0; // Control Register B
+    TCCR1B = 0; // Control Register B (for setting prescaler and CTC mode)
     TCNT1  = 0; // initialize counter value to 0
     TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10); // Prescaler 8
 
@@ -184,10 +184,10 @@ void configureTimer(float intervalMicros) {
 
   if (ocr) {
     CONFIGURE_TIMER1(
-      TCCR1B = 0;
-      OCR1A = ocr;
-      TCCR1B |= (1 << WGM12);
-      TCCR1B |= tccr;
+      TCCR1B = 0; // Reset control register
+      OCR1A = ocr; // Peroid
+      TCCR1B |= (1 << WGM12); // CTC mode
+      TCCR1B |= tccr; // Prescaler
     )
   }
 }
