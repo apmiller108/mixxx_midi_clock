@@ -76,7 +76,7 @@ void setup() {
 
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
   float intervalMicros = bpmToIntervalUS(DEFAULT_BPM);
-  unsigned long ocr = (CPU_FREQ * intervalMicros / (8 * 1000000)) + 0.5;
+  unsigned long ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000);
   CONFIGURE_TIMER1(
     TCCR1A = 0; // Control Register A
     TCCR1B = 0; // Control Register B
@@ -132,8 +132,6 @@ void loop() {
   }
   previousStopButtonState = stopButtonState;
 
-  // TODO Consider longer blinks on the 1 beat of each measure (assume 4/4). Keeps a count of 1..96.
-  // Turn on LED on each beat for about 1/16th note duration
   if (currentClockPulse == 24) {
     digitalWrite(LED_BUILTIN, HIGH);
   } else if (currentClockPulse == 6) {
@@ -169,15 +167,15 @@ void configureTimer(float intervalMicros) {
   // interval for the given bpm. Calculate the timer compare value for each
   // prescaler to see if it fits in Timer1's 16 bytes. MS to S via * 1M. Adds
   // 0.5 to ensure conversion to int rounds up or down appropriately.
-  if ((ocr = ((CPU_FREQ * intervalMicros / (1 * 1000000)) + 0.5)) < 65535) {
+  if ((ocr = (CPU_FREQ * intervalMicros) / (1 * 1000000)) < 65535) {
     tccr |= (0 << CS12) | (0 << CS11) | (1 << CS10);
-  } else if ((ocr = ((CPU_FREQ * intervalMicros / (8 * 1000000)) + 0.5)) < 65535) {
+  } else if ((ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000)) < 65535) {
     tccr |= (0 << CS12) | (1 << CS11) | (0 << CS10);
-  } else if ((ocr = ((CPU_FREQ * intervalMicros / (64 * 1000000)) + 0.5)) < 65535) {
+  } else if ((ocr = (CPU_FREQ * intervalMicros) / (64 * 1000000)) < 65535) {
     tccr |= (0 << CS12) | (1 << CS11) | (1 << CS10);
-  } else if ((ocr = ((CPU_FREQ * intervalMicros / (256 * 1000000)) + 0.5)) < 65535) {
+  } else if ((ocr = (CPU_FREQ * intervalMicros) / (256 * 1000000)) < 65535) {
     tccr |= (1 << CS12) | (0 << CS11) | (0 << CS10);
-  } else if ((ocr = ((CPU_FREQ * intervalMicros / (1024 * 1000000)) + 0.5)) < 65535) {
+  } else if ((ocr = (CPU_FREQ * intervalMicros) / (1024 * 1000000)) < 65535) {
     tccr |= (1 << CS12) | (0 << CS11) | (1 << CS10);
   } else {
     // bpm is too slow. Exceeds timer's maximum ticks.
