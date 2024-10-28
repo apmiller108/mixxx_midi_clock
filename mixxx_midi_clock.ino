@@ -44,9 +44,13 @@ const byte MIDI_STOP = 0xFC;
 const byte MIDI_CLOCK = 0xF8;
 
 
-// TODO extract enum
-// 0 free, 1 syncing to mixxx, 2 syncing to mixxx complete, 3 synced to mixxx
-volatile byte clockStatus = 0;
+enum class clockStatus {
+  free,
+  syncing,
+  syncing_complete,
+  synced_to_mixxx
+};
+volatile byte currentClockStatus = clockStatus::free;
 volatile int currentClockPulse = 1;
 
 bool receivingMidi = false;
@@ -57,12 +61,12 @@ float bpmFractional;
 
 const int PLAY_BUTTON = 2;
 const int STOP_BUTTON = 4;
-enum playState {
-  PLAYING,
-  PAUSED,
-  STOPPED
+enum class playState {
+  playing,
+  paused,
+  stopped
 };
-enum playState currentPlayState = STOPPED;
+enum playState currentPlayState = playState::stopped;
 int playButtonState;
 int stopButtonState;
 int previousPlayButtonState = LOW;
@@ -101,10 +105,10 @@ void setup() {
 }
 
 void loop() {
-  if (clockStatus == 2) { // SYNC COMPLETE
+  if (currentClockStatus == clockStatus::syncing_complete) {
     // configure timer with 24 ppq intervalMicros based on BPM from Mixxx
-    configureTimer(bpmToIntervalUS(bpm)); 
-    clockStatus = 3; // SYNCED
+    configureTimer(bpmToIntervalUS(bpm));
+    currentClockStatus = clockStatus::synced_to_mixxx;
   }
 
   readMidiUSB();
@@ -112,15 +116,15 @@ void loop() {
   // Play button
   playButtonState = digitalRead(PLAY_BUTTON);
   if (playButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
-    if (currentPlayState == STOPPED) {
+    if (currentPlayState == playState::stopped) {
       sendMidiTransportMessage(MIDI_START);
-      currentPlayState = PLAYING;
-    } else if (currentPlayState == PLAYING) {
+      currentPlayState = playState::playing;
+    } else if (currentPlayState == playState::playing) {
       sendMidiTransportMessage(MIDI_STOP);
-      currentPlayState = PAUSED;
-    } else if (currentPlayState == PAUSED) {
+      currentPlayState = playState::paused;
+    } else if (currentPlayState == playState::paused) {
       sendMidiTransportMessage(MIDI_CONT);
-      currentPlayState = PLAYING;
+      currentPlayState = playState::playing;
     }
     lastDebounceTimeMs = millis();
   }
@@ -130,7 +134,7 @@ void loop() {
   stopButtonState = digitalRead(STOP_BUTTON);
   if (stopButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
     sendMidiTransportMessage(MIDI_STOP);
-    currentPlayState = STOPPED;
+    currentPlayState = playState::stopped;
     lastDebounceTimeMs = millis();
   }
   previousStopButtonState = stopButtonState;
@@ -146,8 +150,10 @@ void loop() {
 ISR(TIMER1_COMPA_vect) {
   sendMidiClock();
 
-  if (clockStatus == 1) { // SYNCING
-    clockStatus = 2; // SYNC COMPLETE
+  // When syncing that means the timer has been configured for the first beat
+  // from Mixxx.
+  if (currentClockStatus == clockStatus::syncing) {
+    currentClockStatus = clockStatus::syncing_complete;
   }
 
   // Keep track of the pulse count (PPQ)
@@ -221,13 +227,10 @@ void readMidiUSB() {
       }
 
       float newBpm = bpmWhole + bpmFractional;
-      if (newBpm != bpm) {
+      if (newBpm != bpm && currentClockStatus == clockStatus::syncing_complete) {
         bpm = newBpm;
         float intervalMicros = bpmToIntervalUS(bpm);
-
-        if (clockStatus == 3) {
-          configureTimer(intervalMicros);
-        }
+        configureTimer(intervalMicros);
       }
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
@@ -248,11 +251,11 @@ void readMidiUSB() {
           // The beat length for the given bpm in micros
           unsigned long beatLength =  MICROS_PER_MIN / bpm;
 
-          // Next tick starts in the in micro seconds to the next beat 
+          // Next tick starts in the in micro seconds to the next beat
           float startIn = (beatLength * beatDistance);
           configureTimer(startIn);
           currentClockPulse = 1;
-          clockStatus = 1; // SYNCING
+          currentClockStatus = clockStatus::syncing;
 
           receivingMidi = true;
         }
