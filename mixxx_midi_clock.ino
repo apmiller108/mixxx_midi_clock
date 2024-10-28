@@ -165,8 +165,8 @@ void configureTimer(float intervalMicros) {
 
   // Configure prescaler (1, 8, 64, 256, or 1024) based on the required PPQ
   // interval for the given bpm. Calculate the timer compare value for each
-  // prescaler to see if it fits in Timer1's 16 bytes. MS to S via * 1M. Adds
-  // 0.5 to ensure conversion to int rounds up or down appropriately.
+  // prescaler to see if it fits in Timer1's 16 bits. The division 1M is to fix
+  // the units (eg, ms to s).
   if ((ocr = (CPU_FREQ * intervalMicros) / (1 * 1000000)) < 65535) {
     tccr |= (0 << CS12) | (0 << CS11) | (1 << CS10);
   } else if ((ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000)) < 65535) {
@@ -181,6 +181,8 @@ void configureTimer(float intervalMicros) {
     // bpm is too slow. Exceeds timer's maximum ticks.
     return;
   }
+
+  ocr = ocr - 1 // timer is 0 indexed
 
   if (ocr) {
     CONFIGURE_TIMER1(
