@@ -5,11 +5,14 @@
  * Author: alex miller
  */
 
-// TODO When pressing play, stop interrupts, send play msg, (maybe send midi clock and increment counter)
-// reset Timer1 clock to 0 and restart interrupts (this changes the phase)
+// TODO Map the play behavior to start in sync with the clock position:
+// Keep track of position within 4/4 time with a 96 ticks counter
+// When pausing, store the position count at which it was paused.
+// When unpausing (continue), wait until the same position count arrives on the next cycle
+// When starting, wait until position 96 to start up (eg, right before position 1 on both the 96 and 24 tick clock)
 // TODO test with external gear
 // TODO add encoder to change the phase
-// TODO add screen to display bpm, phase offset, and transport state
+// TODO add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 
 #include "MIDIUSB.h"
 #include <MIDI.h>
