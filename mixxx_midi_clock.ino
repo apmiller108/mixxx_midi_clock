@@ -5,15 +5,16 @@
  * Author: alex miller
  */
 
-// TODO figure out what position to start at when first syncing to mixxx. Is it
+// TODO UX: figure out what position to start at when first syncing to mixxx. Is it
 // even possible? Maybe assume the first message comes on beat one active. But the
 // first complete quarter note will be for beat 2.
-// TODO Move the shouldContinue/Start to the playState enum
-// TODO add encoder to change the phase
-// TODO add screen to display bpm, phase offset, transport state and beat number in 4/4 time
+// TODO Refactor: Move the shouldContinue/Start to the playState enum
+// TODO Feature: add encoder to change the phase
+// TODO Feature add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 
 #include "MIDIUSB.h"
 #include <MIDI.h>
+#include "Encoder.h"
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -49,8 +50,8 @@ enum class clockStatus {
 };
 volatile enum clockStatus currentClockStatus = clockStatus::free;
 volatile int currentClockPulse = 1;
-volatile int position = 1; // Range 1..96. represents the position within a 4/4 measure.
-int pausePostion;
+volatile int barPosition = 1; // Range 1..96. represents the position within a 4/4 measure.
+int pausePosition;
 
 bool receivingMidi = false;
 
@@ -76,12 +77,16 @@ bool shouldStart = false;
 unsigned long lastDebounceTimeMs = 0;
 unsigned long debounceDelayMs = 75;
 
+Encoder phaseKnob(8, 9);
+long phaseKnobPosition = -999;
+
 midiEventPacket_t rx;
 
 void setup() {
   /* Serial.begin(31250); */
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
+  // TODO: Refactor: Extract initializeTimer function
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
   float intervalMicros = bpmToIntervalUS(DEFAULT_BPM);
   unsigned long ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000);
@@ -106,6 +111,7 @@ void setup() {
 }
 
 void loop() {
+  // TODO: refactor: extract onSyncComplate function
   if (currentClockStatus == clockStatus::syncing_complete) {
     // configure timer with 24 ppq intervalMicros based on BPM from Mixxx
     configureTimer(bpmToIntervalUS(bpm));
@@ -113,12 +119,16 @@ void loop() {
   }
 
   readMidiUSB();
+
   handlePlayButton();
   handleStopButton();
+
   handleContinue();
   handleStart();
 
-  // Stop button
+  handlePhaseKnob();
+
+  // TODO: extract handle bpmLED function
   if (currentClockPulse == 24) {
     digitalWrite(LED_BUILTIN, HIGH);
   } else if (currentClockPulse == 6) {
@@ -138,7 +148,7 @@ ISR(TIMER1_COMPA_vect) {
 
   // Keep track of the pulse count (PPQ) in range of 1..24
   currentClockPulse = (currentClockPulse % PPQ) + 1;
-  position = (position % 96) + 1;
+  barPosition = (barPosition % 96) + 1;
 }
 
 float bpmToIntervalUS(float bpm) {
@@ -235,7 +245,7 @@ void readMidiUSB() {
           configureTimer(startIn);
           currentClockStatus = clockStatus::syncing;
           currentClockPulse = 1;
-          position = 1;
+          barPosition = 1;
 
           receivingMidi = true;
         }
@@ -274,7 +284,7 @@ void handlePlayButton() {
     } else if (currentPlayState == playState::playing) {
       sendMidiTransportMessage(MIDI_STOP);
       currentPlayState = playState::paused;
-      pausePostion = position;
+      pausePosition = barPosition;
     } else if (currentPlayState == playState::paused) {
       shouldContinue = true;
     }
@@ -284,7 +294,7 @@ void handlePlayButton() {
 }
 
 void handleContinue() {
-  if (shouldContinue && position == pausePostion) {
+  if (shouldContinue && pausePosition == barPosition) {
     sendMidiTransportMessage(MIDI_CONT);
     currentPlayState = playState::playing;
     shouldContinue = false;
@@ -292,7 +302,7 @@ void handleContinue() {
 }
 
 void handleStart() {
-  if (shouldStart && position == 96) {
+  if (shouldStart && barPosition == 96) {
     sendMidiTransportMessage(MIDI_START);
     currentPlayState = playState::playing;
     shouldStart = false;
@@ -308,4 +318,13 @@ void handleStopButton() {
     lastDebounceTimeMs = millis();
   }
   previousStopButtonState = stopButtonState;
+}
+
+void handlePhaseKnob() {
+  long newPosition = phaseKnob.read();
+  if (phaseKnobPosition != newPosition) {
+    // clockwise, speed up
+    // counter clockwise slow down
+    phaseKnobPosition = newPosition;
+  }
 }
