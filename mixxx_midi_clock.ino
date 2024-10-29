@@ -5,12 +5,10 @@
  * Author: alex miller
  */
 
-// TODO Map the play behavior to start in sync with the clock position:
-// Keep track of position within 4/4 time with a 96 ticks counter
-// When pausing, store the position count at which it was paused.
-// When unpausing (continue), wait until the same position count arrives on the next cycle
-// When starting, wait until position 96 to start up (eg, right before position 1 on both the 96 and 24 tick clock)
-// TODO test with external gear
+// TODO figure out what position to start at when first syncing to mixxx. Is it
+// even possible? Maybe assume the first message comes on beat one active. But the
+// first complete quarter note will be for beat 2.
+// TODO Move the shouldContinue/Start to the playState enum
 // TODO add encoder to change the phase
 // TODO add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 
@@ -43,15 +41,16 @@ const byte MIDI_CONT = 0xFB;
 const byte MIDI_STOP = 0xFC;
 const byte MIDI_CLOCK = 0xF8;
 
-
 enum class clockStatus {
   free,
   syncing,
   syncing_complete,
   synced_to_mixxx
 };
-volatile byte currentClockStatus = clockStatus::free;
+volatile enum clockStatus currentClockStatus = clockStatus::free;
 volatile int currentClockPulse = 1;
+volatile int position = 1; // Range 1..96. represents the position within a 4/4 measure.
+int pausePostion;
 
 bool receivingMidi = false;
 
@@ -71,6 +70,8 @@ int playButtonState;
 int stopButtonState;
 int previousPlayButtonState = LOW;
 int previousStopButtonState = LOW;
+bool shouldContinue = false;
+bool shouldStart = false;
 
 unsigned long lastDebounceTimeMs = 0;
 unsigned long debounceDelayMs = 75;
@@ -112,33 +113,12 @@ void loop() {
   }
 
   readMidiUSB();
-
-  // Play button
-  playButtonState = digitalRead(PLAY_BUTTON);
-  if (playButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
-    if (currentPlayState == playState::stopped) {
-      sendMidiTransportMessage(MIDI_START);
-      currentPlayState = playState::playing;
-    } else if (currentPlayState == playState::playing) {
-      sendMidiTransportMessage(MIDI_STOP);
-      currentPlayState = playState::paused;
-    } else if (currentPlayState == playState::paused) {
-      sendMidiTransportMessage(MIDI_CONT);
-      currentPlayState = playState::playing;
-    }
-    lastDebounceTimeMs = millis();
-  }
-  previousPlayButtonState = playButtonState;
+  handlePlayButton();
+  handleStopButton();
+  handleContinue();
+  handleStart();
 
   // Stop button
-  stopButtonState = digitalRead(STOP_BUTTON);
-  if (stopButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
-    sendMidiTransportMessage(MIDI_STOP);
-    currentPlayState = playState::stopped;
-    lastDebounceTimeMs = millis();
-  }
-  previousStopButtonState = stopButtonState;
-
   if (currentClockPulse == 24) {
     digitalWrite(LED_BUILTIN, HIGH);
   } else if (currentClockPulse == 6) {
@@ -156,12 +136,9 @@ ISR(TIMER1_COMPA_vect) {
     currentClockStatus = clockStatus::syncing_complete;
   }
 
-  // Keep track of the pulse count (PPQ)
-  if (currentClockPulse < PPQ) {
-    currentClockPulse++;
-  } else if (currentClockPulse == PPQ) {
-    currentClockPulse = 1;
-  }
+  // Keep track of the pulse count (PPQ) in range of 1..24
+  currentClockPulse = (currentClockPulse % PPQ) + 1;
+  position = (position % 96) + 1;
 }
 
 float bpmToIntervalUS(float bpm) {
@@ -191,7 +168,7 @@ void configureTimer(float intervalMicros) {
     return;
   }
 
-  ocr = ocr - 1 // timer is 0 indexed
+  ocr = ocr - 1; // timer is 0 indexed
 
   if (ocr) {
     CONFIGURE_TIMER1(
@@ -227,7 +204,7 @@ void readMidiUSB() {
       }
 
       float newBpm = bpmWhole + bpmFractional;
-      if (newBpm != bpm && currentClockStatus == clockStatus::syncing_complete) {
+      if (newBpm != bpm && currentClockStatus == clockStatus::synced_to_mixxx) {
         bpm = newBpm;
         float intervalMicros = bpmToIntervalUS(bpm);
         configureTimer(intervalMicros);
@@ -248,14 +225,17 @@ void readMidiUSB() {
           // multiplied by 127 in order to pass it as a midi value, so it is
           // divided here in order to get the original float value.
           float beatDistance = 1 - (rx.byte3 / 127.0);
-          // The beat length for the given bpm in micros
-          unsigned long beatLength =  MICROS_PER_MIN / bpm;
+          float beatLength =  MICROS_PER_MIN / bpm;
 
-          // Next tick starts in the in micro seconds to the next beat
+          // Next tick starts in the in micro seconds to the next beat.
+          // This assumes getting this message on beat_active for the first beat
+          // in a measure. Maybe corrections can be made as needed by adjusting
+          // the phase.
           float startIn = (beatLength * beatDistance);
           configureTimer(startIn);
-          currentClockPulse = 1;
           currentClockStatus = clockStatus::syncing;
+          currentClockPulse = 1;
+          position = 1;
 
           receivingMidi = true;
         }
@@ -284,4 +264,48 @@ boolean playButtonRising() {
 
 boolean stopButtonRising() {
   return previousStopButtonState == LOW && stopButtonState == HIGH;
+}
+
+void handlePlayButton() {
+  playButtonState = digitalRead(PLAY_BUTTON);
+  if (playButtonRising() && (millis() - lastDebounceTimeMs) > debounceDelayMs) {
+    if (currentPlayState == playState::stopped) {
+      shouldStart = true;
+    } else if (currentPlayState == playState::playing) {
+      sendMidiTransportMessage(MIDI_STOP);
+      currentPlayState = playState::paused;
+      pausePostion = position;
+    } else if (currentPlayState == playState::paused) {
+      shouldContinue = true;
+    }
+    lastDebounceTimeMs = millis();
+  }
+  previousPlayButtonState = playButtonState;
+}
+
+void handleContinue() {
+  if (shouldContinue && position == pausePostion) {
+    sendMidiTransportMessage(MIDI_CONT);
+    currentPlayState = playState::playing;
+    shouldContinue = false;
+  }
+}
+
+void handleStart() {
+  if (shouldStart && position == 96) {
+    sendMidiTransportMessage(MIDI_START);
+    currentPlayState = playState::playing;
+    shouldStart = false;
+  }
+}
+
+void handleStopButton() {
+  stopButtonState = digitalRead(STOP_BUTTON);
+  if (stopButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
+    sendMidiTransportMessage(MIDI_STOP);
+    currentPlayState = playState::stopped;
+    shouldContinue = false;
+    lastDebounceTimeMs = millis();
+  }
+  previousStopButtonState = stopButtonState;
 }
