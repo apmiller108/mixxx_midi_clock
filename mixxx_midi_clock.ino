@@ -13,9 +13,9 @@
 // TODO Feature: add encoder to change the phase
 // TODO Feature add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 
-#include "MIDIUSB.h"
-#include <MIDI.h>
-#include <NewEncoder.h>
+#include "MIDIUSB.h"    // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
+#include <MIDI.h>       // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
+#include <NewEncoder.h> // https://github.com/gfvalvo/NewEncoder (MIT?)
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -78,7 +78,7 @@ bool shouldStart = false;
 unsigned long lastDebounceTimeMs = 0;
 unsigned long debounceDelayMs = 75;
 
-NewEncoder phaseKnob(3, 7, -20, 20, 0, FULL_PULSE);
+NewEncoder phaseKnob(3, 7, -100, 100, 0, FULL_PULSE);
 long previousPhaseKnobValue;
 
 midiEventPacket_t rx;
@@ -328,28 +328,27 @@ void handlePhaseKnob() {
 
   if (phaseKnob.getState(currentState)) {
     currentValue = currentState.currentValue;
-    
+
     if (previousPhaseKnobValue != currentValue) {
       if (currentValue > previousPhaseKnobValue) {
+        // speed up
         Serial.print("Clock-wise: ");
         Serial.println(currentValue);
       } else {
+        // slow down
         Serial.print("Counter Clock-wise: ");
         Serial.println(currentValue);
       }
       previousPhaseKnobValue = currentValue;
     } else {
-      NewEncoder::EncoderState state;
       switch (currentState.currentClick) {
       case NewEncoder::UpClick:
+        // speed up
         Serial.println("upper limit");
-        previousPhaseKnobValue = -21;
-        phaseKnob.getAndSet(-20, currentState, state);
         break;
       case NewEncoder::DownClick:
         Serial.println("lower limit");
-        previousPhaseKnobValue = 21;
-        phaseKnob.getAndSet(20, currentState, state);
+        // slow down
       default:
         break;
       }
