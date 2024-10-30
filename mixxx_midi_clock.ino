@@ -130,6 +130,12 @@ void loop() {
 
   handlePhaseKnob();
 
+  if (phaseChanged && currentClockPulse >= resumeFromPhaseChangePulse) {
+    configureTimer(bpmToIntervalUS(bpm));
+    phaseChanged = false;
+    resumeFromPhaseChangePulse = 0;
+  }
+
   // TODO: extract handle bpmLED function
   if (currentClockPulse == 24) {
     digitalWrite(LED_BUILTIN, HIGH);
@@ -322,36 +328,40 @@ void handleStopButton() {
   previousStopButtonState = stopButtonState;
 }
 
+bool phaseChanged = false;
+int resumeFromPhaseChangePulse = 0;
 void handlePhaseKnob() {
-  long currentValue; 
+  long currentValue;
   NewEncoder::EncoderState currentState;
 
-  if (phaseKnob.getState(currentState)) {
-    currentValue = currentState.currentValue;
+  phaseKnob.getState(currentState);
+  currentValue = currentState.currentValue;
 
-    if (previousPhaseKnobValue != currentValue) {
-      if (currentValue > previousPhaseKnobValue) {
-        // speed up
-        Serial.print("Clock-wise: ");
-        Serial.println(currentValue);
-      } else {
-        // slow down
-        Serial.print("Counter Clock-wise: ");
-        Serial.println(currentValue);
-      }
-      previousPhaseKnobValue = currentValue;
+  if (previousPhaseKnobValue != currentValue) {
+    float phaseAdjustedIntervalUS;
+    if (currentValue > previousPhaseKnobValue) {
+      phaseAdjustedIntervalUS = bpmToIntervalUS(bpm) * 0.75
+      configureTimer(phaseAdjustedIntervalUS);
+      resumeFromPhaseChangePulse = (currentClockPulse + 6) % PPQ;
+      phaseChanged = true;
     } else {
-      switch (currentState.currentClick) {
-      case NewEncoder::UpClick:
-        // speed up
-        Serial.println("upper limit");
-        break;
-      case NewEncoder::DownClick:
-        Serial.println("lower limit");
-        // slow down
-      default:
-        break;
-      }
+      phaseAdjustedIntervalUS = bpmToIntervalUS(bpm) * 1.25
+      configureTimer(phaseAdjustedIntervalUS);
+      resumeFromPhaseChangePulse = (currentClockPulse + 6) % PPQ;
+      phaseChanged = true;
     }
+    previousPhaseKnobValue = currentValue;
+  } else if (currentState.currentClick == NewEncoder::UpClick) {
+    phaseAdjustedIntervalUS = bpmToIntervalUS(bpm) * 0.75
+    configureTimer(phaseAdjustedIntervalUS);
+    resumeFromPhaseChangePulse = (currentClockPulse + 6) % PPQ;
+    phaseChanged = true;
+  } else if (currentState.currentClick == NewEncoder::DownClick) {
+    phaseAdjustedIntervalUS = bpmToIntervalUS(bpm) * 1.25
+    configureTimer(phaseAdjustedIntervalUS);
+    resumeFromPhaseChangePulse = (currentClockPulse + 6) % PPQ;
+    phaseChanged = true;
+  } else {
+    // bugger off
   }
 }
