@@ -1,3 +1,4 @@
+
 /*
  * mixxx_midi_clock.ino
  *
@@ -14,7 +15,7 @@
 
 #include "MIDIUSB.h"
 #include <MIDI.h>
-#include "Encoder.h"
+#include <NewEncoder.h>
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -77,14 +78,15 @@ bool shouldStart = false;
 unsigned long lastDebounceTimeMs = 0;
 unsigned long debounceDelayMs = 75;
 
-Encoder phaseKnob(8, 9);
-long phaseKnobPosition = -999;
+NewEncoder phaseKnob(3, 7, -20, 20, 0, FULL_PULSE);
+long previousPhaseKnobValue;
 
 midiEventPacket_t rx;
 
 void setup() {
-  /* Serial.begin(31250); */
+  Serial.begin(31250);
   MIDI.begin(MIDI_CHANNEL_OMNI);
+  phaseKnob.begin();
 
   // TODO: Refactor: Extract initializeTimer function
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
@@ -321,10 +323,36 @@ void handleStopButton() {
 }
 
 void handlePhaseKnob() {
-  long newPosition = phaseKnob.read();
-  if (phaseKnobPosition != newPosition) {
-    // clockwise, speed up
-    // counter clockwise slow down
-    phaseKnobPosition = newPosition;
+  long currentValue; 
+  NewEncoder::EncoderState currentState;
+
+  if (phaseKnob.getState(currentState)) {
+    currentValue = currentState.currentValue;
+    
+    if (previousPhaseKnobValue != currentValue) {
+      if (currentValue > previousPhaseKnobValue) {
+        Serial.print("Clock-wise: ");
+        Serial.println(currentValue);
+      } else {
+        Serial.print("Counter Clock-wise: ");
+        Serial.println(currentValue);
+      }
+      previousPhaseKnobValue = currentValue;
+    } else {
+      NewEncoder::EncoderState state;
+      switch (currentState.currentClick) {
+      case NewEncoder::UpClick:
+        Serial.println("upper limit");
+        previousPhaseKnobValue = -21;
+        phaseKnob.getAndSet(-20, currentState, state);
+        break;
+      case NewEncoder::DownClick:
+        Serial.println("lower limit");
+        previousPhaseKnobValue = 21;
+        phaseKnob.getAndSet(20, currentState, state);
+      default:
+        break;
+      }
+    }
   }
 }
