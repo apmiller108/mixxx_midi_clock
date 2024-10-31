@@ -11,6 +11,7 @@
 // first complete quarter note will be for beat 2. Actually, seems to think beat
 // 1 is mixxx's beat 4.
 // TODO Feature add screen to display bpm, phase offset, transport state and beat number in 4/4 time
+// TODO Refactor: change US to Micros. Be consistent.
 
 #include "MIDIUSB.h"    // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h>       // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
@@ -79,8 +80,10 @@ unsigned long debounceDelayMs = 200;
 
 NewEncoder jogKnob(3, 7, -100, 100, 0, FULL_PULSE);
 long previousJogKnobValue;
-bool tempoNudged = false;
-int resumeFromJogChangePulse = 0;
+bool volatile tempoNudged = false;
+int volatile tempoNudgedAtPulse = 0;
+int volatile tempoNudgedInterval = 6; // Tempo nudges lasts for 1/16th note.
+int volatile resumeFromTempoNudge = false;
 
 midiEventPacket_t rx;
 
@@ -108,7 +111,7 @@ void loop() {
   handleStart();
 
   handleJogKnob();
-  handleTempoNudged();
+  handleResumeFromTempoNudged();
 
   handleBPMLED();
 }
@@ -137,8 +140,7 @@ void initializeTimer() {
 ISR(TIMER1_COMPA_vect) {
   sendMidiClock();
 
-  // When syncing that means the timer has been configured for the first beat
-  // from Mixxx.
+  // Syncing that means the timer has been configured for Mixxx's next beat.
   if (currentClockStatus == clockStatus::syncing) {
     currentClockStatus = clockStatus::syncing_complete;
   }
@@ -146,6 +148,16 @@ ISR(TIMER1_COMPA_vect) {
   // Keep track of the pulse count (PPQ) in range of 1..24
   currentClockPulse = (currentClockPulse % PPQ) + 1;
   barPosition = (barPosition % 96) + 1;
+
+  if (tempoNudged) {
+    // Uses modulo arithmetic to determine the clock pulse interval constrainted
+    // to (under)overflows within range 1..24.
+    int clockPulsesSinceTempoNudged = ((currentClockPulse - tempoNudgedAtPulse - 1) % PPQ + PPQ) % PPQ + 1;
+
+    if (clockPulsesSinceTempoNudged >= tempoNudgedInterval) {
+      resumeFromTempoNudge = true;
+    }
+  }
 }
 
 // configure the timer with 24 ppq intervalMicros based on BPM receivd from Mixxx
@@ -339,6 +351,9 @@ void handleStopButton() {
   previousStopButtonState = stopButtonState;
 }
 
+// Encoder driven in order to mimic a DJ jog wheel as much as this is possible
+// with a midi clock (eg, no going backwards). Used to nudge the tempo up and
+// down temporarily in order to change the phase of the clock.
 void handleJogKnob() {
   long currentValue;
   NewEncoder::EncoderState currentState;
@@ -360,19 +375,23 @@ void handleJogKnob() {
   }
 }
 
+// Temporary +/- adjustment to the current timer interval in order to speed up
+// or slow down the midi clock. Used to adjust the phase of the clock.
 void nudgeTempo(float amount) {
   float currentBPMIntervalUS = bpmToIntervalUS(getBPM());
   float nudgedInterval = currentBPMIntervalUS * amount;
   configureTimer(nudgedInterval);
-  resumeFromJogChangePulse = ((currentClockPulse + 5) % PPQ) + 1;
+  tempoNudgedAtPulse = currentClockPulse;
   tempoNudged = true;
 }
 
-void handleTempoNudged() {
-  if (tempoNudged && currentClockPulse >= resumeFromJogChangePulse) {
+// Re-configures the timer after a tempo nudge back to the original interval
+// based on the current BPM.
+void handleResumeFromTempoNudged() {
+  if (resumeFromTempoNudge) {
     configureTimer(bpmToIntervalUS(getBPM()));
     tempoNudged = false;
-    resumeFromJogChangePulse = 0;
+    resumeFromTempoNudge = false;
   }
 }
 
