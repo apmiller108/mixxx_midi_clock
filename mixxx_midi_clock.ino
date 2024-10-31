@@ -34,7 +34,7 @@ const unsigned long CPU_FREQ = 16000000; // 16 MHz clock speed
 const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
 
-const float DEFAULT_BPM = 122; 
+const float DEFAULT_BPM = 122;
 
 const byte MIDI_START = 0xFA;
 const byte MIDI_CONT = 0xFB;
@@ -75,7 +75,7 @@ int previousStopButtonState = LOW;
 bool shouldContinue = false;
 
 unsigned long lastDebounceTimeMs = 0;
-unsigned long debounceDelayMs = 75;
+unsigned long debounceDelayMs = 200;
 
 NewEncoder jogKnob(3, 7, -100, 100, 0, FULL_PULSE);
 long previousJogKnobValue;
