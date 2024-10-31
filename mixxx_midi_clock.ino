@@ -80,7 +80,7 @@ unsigned long debounceDelayMs = 200;
 
 NewEncoder jogKnob(3, 7, -100, 100, 0, FULL_PULSE);
 long previousJogKnobValue;
-bool volatile tempocudged = false;
+bool volatile tempoNudged = false;
 int volatile tempoNudgedAtClockPulse = 0;
 int volatile tempoNudgedClockPulseInterval = 6; // Tempo nudges lasts for 1/16th note.
 int volatile resumeFromTempoNudge = false;
@@ -150,9 +150,15 @@ ISR(TIMER1_COMPA_vect) {
   barPosition = (barPosition % 96) + 1;
 
   if (tempoNudged) {
-    // Uses modulo arithmetic to determine the clock pulse interval constrainted
-    // to (under)overflows within range 1..24.
-    int clockPulsesSinceTempoNudged = ((currentClockPulse - tempoNudgedAtClockPulse - 1) % PPQ + PPQ) % PPQ + 1;
+    // Uses modulo arithmetic to determine the clock pulse interval since the
+    // nudge. It is constrainted to (under)overflows within range 1..24. In CPP
+    // the modulo on a negative number is not treated like a positive number
+    // like it is in other languages. In Ruby, for example, `-20 % 24 = 4`,
+    // while in CPP it is `-20`. This means PPQ is added to get rid of the
+    // negative if present, and value is re-modulo-ed. The +/- 1 is because 1
+    // is the minimum value.
+    int clockPulsesSinceTempoNudged = ((currentClockPulse - tempoNudgedAtClockPulse - 1) \
+                                         % PPQ + PPQ) % PPQ + 1;
 
     if (clockPulsesSinceTempoNudged >= tempoNudgedClockPulseInterval) {
       resumeFromTempoNudge = true;
