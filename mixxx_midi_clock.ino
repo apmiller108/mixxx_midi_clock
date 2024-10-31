@@ -80,9 +80,9 @@ unsigned long debounceDelayMs = 200;
 
 NewEncoder jogKnob(3, 7, -100, 100, 0, FULL_PULSE);
 long previousJogKnobValue;
-bool volatile tempoNudged = false;
-int volatile tempoNudgedAtPulse = 0;
-int volatile tempoNudgedInterval = 6; // Tempo nudges lasts for 1/16th note.
+bool volatile tempocudged = false;
+int volatile tempoNudgedAtClockPulse = 0;
+int volatile tempoNudgedClockPulseInterval = 6; // Tempo nudges lasts for 1/16th note.
 int volatile resumeFromTempoNudge = false;
 
 midiEventPacket_t rx;
@@ -152,9 +152,9 @@ ISR(TIMER1_COMPA_vect) {
   if (tempoNudged) {
     // Uses modulo arithmetic to determine the clock pulse interval constrainted
     // to (under)overflows within range 1..24.
-    int clockPulsesSinceTempoNudged = ((currentClockPulse - tempoNudgedAtPulse - 1) % PPQ + PPQ) % PPQ + 1;
+    int clockPulsesSinceTempoNudged = ((currentClockPulse - tempoNudgedAtClockPulse - 1) % PPQ + PPQ) % PPQ + 1;
 
-    if (clockPulsesSinceTempoNudged >= tempoNudgedInterval) {
+    if (clockPulsesSinceTempoNudged >= tempoNudgedClockPulseInterval) {
       resumeFromTempoNudge = true;
     }
   }
@@ -381,7 +381,7 @@ void nudgeTempo(float amount) {
   float currentBPMIntervalUS = bpmToIntervalUS(getBPM());
   float nudgedInterval = currentBPMIntervalUS * amount;
   configureTimer(nudgedInterval);
-  tempoNudgedAtPulse = currentClockPulse;
+  tempoNudgedAtClockPulse = currentClockPulse;
   tempoNudged = true;
 }
 
