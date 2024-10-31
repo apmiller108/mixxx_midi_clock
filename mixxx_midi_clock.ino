@@ -8,9 +8,8 @@
 
 // TODO UX: figure out what position to start at when first syncing to mixxx. Is it
 // even possible? Maybe assume the first message comes on beat one active. But the
-// first complete quarter note will be for beat 2.
-// TODO Refactor: Move the shouldContinue/Start to the playState enum
-// TODO Feature: add encoder to change the phase
+// first complete quarter note will be for beat 2. Actually, seems to think beat
+// 1 is mixxx's beat 4.
 // TODO Feature add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 
 #include "MIDIUSB.h"    // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
@@ -31,12 +30,11 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 
 #define CONFIGURE_TIMER1(X) cli(); X; sei();
 
-const unsigned long CPU_FREQ = 16000000;  // 16 MHz clock speed
-// 1 second in microseconds. This means the minimum supported BPM is 60 (eg, 1
-// beat per 1 second)
+const unsigned long CPU_FREQ = 16000000; // 16 MHz clock speed
 const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
-const float DEFAULT_BPM = 122; // Default BPM until read from midi messages from Mixxx
+
+const float DEFAULT_BPM = 122; 
 
 const byte MIDI_START = 0xFA;
 const byte MIDI_CONT = 0xFB;
@@ -51,20 +49,22 @@ enum class clockStatus {
 };
 volatile enum clockStatus currentClockStatus = clockStatus::free;
 volatile int currentClockPulse = 1;
-volatile int barPosition = 1; // Range 1..96. represents the position within a 4/4 measure.
+volatile int barPosition = 1; // Range 1..96. Represents the position within a 4/4 measure.
 int pausePosition;
 
 bool receivingMidi = false;
 
-float bpm = 0;
-int bpmWhole;
-float bpmFractional;
+float mixxxBPM = 0;
+int mixxxBPMWhole;
+float mixxxBPMFractional;
 
 const int PLAY_BUTTON = 2;
 const int STOP_BUTTON = 4;
 enum class playState {
+  started,
   playing,
   paused,
+  unpaused,
   stopped
 };
 enum playState currentPlayState = playState::stopped;
@@ -73,22 +73,47 @@ int stopButtonState;
 int previousPlayButtonState = LOW;
 int previousStopButtonState = LOW;
 bool shouldContinue = false;
-bool shouldStart = false;
 
 unsigned long lastDebounceTimeMs = 0;
 unsigned long debounceDelayMs = 75;
 
-NewEncoder phaseKnob(3, 7, -100, 100, 0, FULL_PULSE);
-long previousPhaseKnobValue;
+NewEncoder jogKnob(3, 7, -100, 100, 0, FULL_PULSE);
+long previousJogKnobValue;
+bool tempoNudged = false;
+int resumeFromJogChangePulse = 0;
 
 midiEventPacket_t rx;
 
 void setup() {
-  Serial.begin(31250);
+  /* Serial.begin(31250); */
   MIDI.begin(MIDI_CHANNEL_OMNI);
-  phaseKnob.begin();
+  jogKnob.begin();
 
-  // TODO: Refactor: Extract initializeTimer function
+  initializeTimer();
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(PLAY_BUTTON, INPUT);
+  pinMode(STOP_BUTTON, INPUT);
+}
+
+void loop() {
+  onSyncComplete();
+
+  readMidiUSB();
+
+  handlePlayButton();
+  handleStopButton();
+
+  handleContinue();
+  handleStart();
+
+  handleJogKnob();
+  handleTempoNudged();
+
+  handleBPMLED();
+}
+
+void initializeTimer() {
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
   float intervalMicros = bpmToIntervalUS(DEFAULT_BPM);
   unsigned long ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000);
@@ -106,42 +131,6 @@ void setup() {
     // Enable timer overflow interrupt
     TIMSK1 |= (1 << OCIE1A);
    )
-
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(PLAY_BUTTON, INPUT);
-  pinMode(STOP_BUTTON, INPUT);
-}
-
-void loop() {
-  // TODO: refactor: extract onSyncComplate function
-  if (currentClockStatus == clockStatus::syncing_complete) {
-    // configure timer with 24 ppq intervalMicros based on BPM from Mixxx
-    configureTimer(bpmToIntervalUS(bpm));
-    currentClockStatus = clockStatus::synced_to_mixxx;
-  }
-
-  readMidiUSB();
-
-  handlePlayButton();
-  handleStopButton();
-
-  handleContinue();
-  handleStart();
-
-  handlePhaseKnob();
-
-  if (phaseChanged && currentClockPulse >= resumeFromPhaseChangePulse) {
-    configureTimer(bpmToIntervalUS(bpm));
-    phaseChanged = false;
-    resumeFromPhaseChangePulse = 0;
-  }
-
-  // TODO: extract handle bpmLED function
-  if (currentClockPulse == 24) {
-    digitalWrite(LED_BUILTIN, HIGH);
-  } else if (currentClockPulse == 6) {
-    digitalWrite(LED_BUILTIN, LOW);
-  }
 }
 
 // Timer1 COMPA interrupt function
@@ -157,6 +146,14 @@ ISR(TIMER1_COMPA_vect) {
   // Keep track of the pulse count (PPQ) in range of 1..24
   currentClockPulse = (currentClockPulse % PPQ) + 1;
   barPosition = (barPosition % 96) + 1;
+}
+
+// configure the timer with 24 ppq intervalMicros based on BPM receivd from Mixxx
+void onSyncComplete() {
+  if (currentClockStatus == clockStatus::syncing_complete) {
+    configureTimer(bpmToIntervalUS(mixxxBPM));
+    currentClockStatus = clockStatus::synced_to_mixxx;
+  }
 }
 
 float bpmToIntervalUS(float bpm) {
@@ -214,17 +211,17 @@ void readMidiUSB() {
       if (rx.byte2 == 0x34) {
         // The Mixxx controller script subtracts 50 from the BPM so it fits in a
         // 0-127 midi range. So, 50 is added to the value to get the actual BPM.
-        bpmWhole = rx.byte3 + 50;
+        mixxxBPMWhole = rx.byte3 + 50;
       }
 
       if (rx.byte2 == 0x35) {
-        bpmFractional = rx.byte3 / 100.0;
+        mixxxBPMFractional = rx.byte3 / 100.0;
       }
 
-      float newBpm = bpmWhole + bpmFractional;
-      if (newBpm != bpm && currentClockStatus == clockStatus::synced_to_mixxx) {
-        bpm = newBpm;
-        float intervalMicros = bpmToIntervalUS(bpm);
+      float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
+      if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
+        mixxxBPM = newMixxxBPM;
+        float intervalMicros = bpmToIntervalUS(mixxxBPM);
         configureTimer(intervalMicros);
       }
 
@@ -243,7 +240,7 @@ void readMidiUSB() {
           // multiplied by 127 in order to pass it as a midi value, so it is
           // divided here in order to get the original float value.
           float beatDistance = 1 - (rx.byte3 / 127.0);
-          float beatLength =  MICROS_PER_MIN / bpm;
+          float beatLength =  MICROS_PER_MIN / mixxxBPM;
 
           // Next tick starts in the in micro seconds to the next beat.
           // This assumes getting this message on beat_active for the first beat
@@ -284,36 +281,38 @@ boolean stopButtonRising() {
   return previousStopButtonState == LOW && stopButtonState == HIGH;
 }
 
+// TODO handle when unpaused and pausing again (abort unpause)
+// TODO handle when started and stopping again (abort start)
 void handlePlayButton() {
   playButtonState = digitalRead(PLAY_BUTTON);
   if (playButtonRising() && (millis() - lastDebounceTimeMs) > debounceDelayMs) {
     if (currentPlayState == playState::stopped) {
-      shouldStart = true;
+      currentPlayState = playState::started;
     } else if (currentPlayState == playState::playing) {
       sendMidiTransportMessage(MIDI_STOP);
       currentPlayState = playState::paused;
       pausePosition = barPosition;
     } else if (currentPlayState == playState::paused) {
-      shouldContinue = true;
+      currentPlayState = playState::unpaused;
     }
     lastDebounceTimeMs = millis();
   }
   previousPlayButtonState = playButtonState;
 }
 
+// Resume playing at the same position in the bar when paused.
 void handleContinue() {
-  if (shouldContinue && pausePosition == barPosition) {
+  if (currentPlayState == playState::unpaused && pausePosition == barPosition) {
     sendMidiTransportMessage(MIDI_CONT);
     currentPlayState = playState::playing;
-    shouldContinue = false;
   }
 }
 
+// Always start on beat 1
 void handleStart() {
-  if (shouldStart && barPosition == 96) {
+  if (currentPlayState == playState::started && barPosition == 96) {
     sendMidiTransportMessage(MIDI_START);
     currentPlayState = playState::playing;
-    shouldStart = false;
   }
 }
 
@@ -328,40 +327,54 @@ void handleStopButton() {
   previousStopButtonState = stopButtonState;
 }
 
-bool phaseChanged = false;
-int resumeFromPhaseChangePulse = 0;
-void handlePhaseKnob() {
+void handleJogKnob() {
   long currentValue;
   NewEncoder::EncoderState currentState;
 
-  phaseKnob.getState(currentState);
+  jogKnob.getState(currentState);
   currentValue = currentState.currentValue;
 
-  if (previousPhaseKnobValue != currentValue) {
-    float phaseAdjustedIntervalUS;
-    if (currentValue > previousPhaseKnobValue) {
-      phaseAdjustedIntervalUS = bpmToIntervalUS(bpm) * 0.75
-      configureTimer(phaseAdjustedIntervalUS);
-      resumeFromPhaseChangePulse = (currentClockPulse + 6) % PPQ;
-      phaseChanged = true;
+  if (previousJogKnobValue != currentValue) {
+    if (currentValue > previousJogKnobValue) {
+      nudgeTempo(0.9);
     } else {
-      phaseAdjustedIntervalUS = bpmToIntervalUS(bpm) * 1.25
-      configureTimer(phaseAdjustedIntervalUS);
-      resumeFromPhaseChangePulse = (currentClockPulse + 6) % PPQ;
-      phaseChanged = true;
+      nudgeTempo(1.10);
     }
-    previousPhaseKnobValue = currentValue;
+    previousJogKnobValue = currentValue;
   } else if (currentState.currentClick == NewEncoder::UpClick) {
-    phaseAdjustedIntervalUS = bpmToIntervalUS(bpm) * 0.75
-    configureTimer(phaseAdjustedIntervalUS);
-    resumeFromPhaseChangePulse = (currentClockPulse + 6) % PPQ;
-    phaseChanged = true;
+    nudgeTempo(0.9);
   } else if (currentState.currentClick == NewEncoder::DownClick) {
-    phaseAdjustedIntervalUS = bpmToIntervalUS(bpm) * 1.25
-    configureTimer(phaseAdjustedIntervalUS);
-    resumeFromPhaseChangePulse = (currentClockPulse + 6) % PPQ;
-    phaseChanged = true;
-  } else {
-    // bugger off
+    nudgeTempo(1.10);
+  }
+}
+
+void nudgeTempo(float amount) {
+  float currentBPMIntervalUS = bpmToIntervalUS(getBPM());
+  float nudgedInterval = currentBPMIntervalUS * amount;
+  configureTimer(nudgedInterval);
+  resumeFromJogChangePulse = ((currentClockPulse + 5) % PPQ) + 1;
+  tempoNudged = true;
+}
+
+void handleTempoNudged() {
+  if (tempoNudged && currentClockPulse >= resumeFromJogChangePulse) {
+    configureTimer(bpmToIntervalUS(getBPM()));
+    tempoNudged = false;
+    resumeFromJogChangePulse = 0;
+  }
+}
+
+float getBPM() {
+  if (currentClockStatus == clockStatus::synced_to_mixxx) {
+    return mixxxBPM;
+  }
+  return DEFAULT_BPM;
+}
+
+void handleBPMLED() {
+  if (currentClockPulse == 24) {
+    digitalWrite(LED_BUILTIN, HIGH);
+  } else if (currentClockPulse == 6) {
+    digitalWrite(LED_BUILTIN, LOW);
   }
 }
