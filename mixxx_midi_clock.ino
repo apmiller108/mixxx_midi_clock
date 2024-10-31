@@ -160,14 +160,15 @@ float bpmToIntervalUS(float bpm) {
   return MICROS_PER_MIN / bpm / PPQ;
 }
 
+
+// Configure prescaler (1, 8, 64, 256, or 1024) based on the required PPQ
+// interval for the given bpm's PPQ interval. Calculate the timer compare
+// value for each prescaler to see if it fits in Timer1's 16 bits. The
+// division 1M is to fix the units (eg, ms to s).
 void configureTimer(float intervalMicros) {
   unsigned long ocr;
   byte tccr;
 
-  // Configure prescaler (1, 8, 64, 256, or 1024) based on the required PPQ
-  // interval for the given bpm. Calculate the timer compare value for each
-  // prescaler to see if it fits in Timer1's 16 bits. The division 1M is to fix
-  // the units (eg, ms to s).
   if ((ocr = (CPU_FREQ * intervalMicros) / (1 * 1000000)) < 65535) {
     tccr |= (0 << CS12) | (0 << CS11) | (1 << CS10);
   } else if ((ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000)) < 65535) {
@@ -179,7 +180,8 @@ void configureTimer(float intervalMicros) {
   } else if ((ocr = (CPU_FREQ * intervalMicros) / (1024 * 1000000)) < 65535) {
     tccr |= (1 << CS12) | (0 << CS11) | (1 << CS10);
   } else {
-    // bpm is too slow. Exceeds timer's maximum ticks.
+    // bpm is too slow. Exceeds timer's maxium interval, which is 4.19 seconds
+    // (~14 bpm)
     return;
   }
 
@@ -188,7 +190,7 @@ void configureTimer(float intervalMicros) {
   if (ocr) {
     CONFIGURE_TIMER1(
       TCCR1B = 0; // Reset control register
-      OCR1A = ocr; // Peroid
+      OCR1A = ocr; // Compare match value
       TCCR1B |= (1 << WGM12); // CTC mode
       TCCR1B |= tccr; // Prescaler
     )
@@ -281,19 +283,29 @@ boolean stopButtonRising() {
   return previousStopButtonState == LOW && stopButtonState == HIGH;
 }
 
-// TODO handle when unpaused and pausing again (abort unpause)
-// TODO handle when started and stopping again (abort start)
 void handlePlayButton() {
   playButtonState = digitalRead(PLAY_BUTTON);
   if (playButtonRising() && (millis() - lastDebounceTimeMs) > debounceDelayMs) {
-    if (currentPlayState == playState::stopped) {
-      currentPlayState = playState::started;
-    } else if (currentPlayState == playState::playing) {
+    switch (currentPlayState) {
+    case playState::stopped:
+      currentPlayState = playState::started; // Will start on beat 1
+      break;
+    case playState::playing:
       sendMidiTransportMessage(MIDI_STOP);
       currentPlayState = playState::paused;
       pausePosition = barPosition;
-    } else if (currentPlayState == playState::paused) {
-      currentPlayState = playState::unpaused;
+      break;
+    case playState::paused:
+      currentPlayState = playState::unpaused; // Will resume on pausePosition
+      break;
+    case playState::unpaused:
+      currentPlayState = playState::paused; // Abort continue
+      break;
+    case playState::started:
+      currentPlayState = playState::stopped; // Abort start playing
+      break;
+    default:
+      break;
     }
     lastDebounceTimeMs = millis();
   }
