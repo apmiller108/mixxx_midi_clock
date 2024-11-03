@@ -97,6 +97,12 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
+
+  // TODO get a display up and running
+  //   See also https://www.instructables.com/Arduino-and-the-SSD1306-OLED-I2C-128x64-Display/
+  //   Connect to the board
+  //   Check I2C address
+  //   Run the ada fruit demo
 }
 
 void loop() {
