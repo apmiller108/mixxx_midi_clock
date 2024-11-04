@@ -59,7 +59,7 @@ float mixxxBPM = 0;
 int mixxxBPMWhole;
 float mixxxBPMFractional;
 
-const int PLAY_BUTTON = 2;
+const int PLAY_BUTTON = 8;
 const int STOP_BUTTON = 4;
 enum class playState {
   started,
@@ -85,6 +85,13 @@ int volatile tempoNudgedAtClockPulse = 0;
 int volatile tempoNudgedClockPulseInterval = 6; // Tempo nudges lasts for 1/16th note.
 int volatile resumeFromTempoNudge = false;
 
+const int SCREEN_WIDTH = 128; 
+const int SCREEN_HEIGHT = 64; 
+const int OLED_RESET = -1;
+const byte SCREEN_ADDRESS = 0x3C;
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
 midiEventPacket_t rx;
 
 void setup() {
@@ -99,6 +106,31 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
+
+  // TODO get a display up and running
+  //   See also https://www.instructables.com/Arduino-and-the-SSD1306-OLED-I2C-128x64-Display/
+
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
+  display.display();
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.print(F("mixxx midi clock"));
+  display.display();
+
+  delay(2000);
+
+  display.clearDisplay();
+  display.display();
+
+  /* Draw a single pixel in white */
+  /* display.drawPixel(10, 10, SSD1306_WHITE); */
+  /* display.display(); */
 }
 
 void loop() {
@@ -116,6 +148,17 @@ void loop() {
   handleResumeFromTempoNudged();
 
   handleBPMLED();
+  if (currentClockPulse == 24) {
+    handleDrawUI();
+  }
+}
+
+void handleDrawUI() {
+  display.setCursor(0, 16);
+  display.setTextSize(1);
+  display.print(F("BPM: "));
+  display.print(getBPM());
+  display.display();
 }
 
 void initializeTimer() {
