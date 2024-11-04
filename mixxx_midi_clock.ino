@@ -16,6 +16,9 @@
 #include "MIDIUSB.h"    // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h>       // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
 #include <NewEncoder.h> // https://github.com/gfvalvo/NewEncoder (MIT?)
+#include <Adafruit_GFX.h>
+#define SSD1306_NO_SPLASH // Disables Adafruit splash screen
+#include <Adafruit_SSD1306.h>
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -85,8 +88,8 @@ int volatile tempoNudgedAtClockPulse = 0;
 int volatile tempoNudgedClockPulseInterval = 6; // Tempo nudges lasts for 1/16th note.
 int volatile resumeFromTempoNudge = false;
 
-const int SCREEN_WIDTH = 128; 
-const int SCREEN_HEIGHT = 64; 
+const int SCREEN_WIDTH = 128;
+const int SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 const byte SCREEN_ADDRESS = 0x3C;
 
@@ -95,9 +98,10 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 midiEventPacket_t rx;
 
 void setup() {
-  /* Serial.begin(31250); */
-  /* while(!Serial) { */
-  /* } */
+  Serial.begin(31250);
+  while(!Serial) {
+
+  }
   MIDI.begin(MIDI_CHANNEL_OMNI);
   jogKnob.begin();
 
@@ -107,9 +111,7 @@ void setup() {
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
 
-  // TODO get a display up and running
-  //   See also https://www.instructables.com/Arduino-and-the-SSD1306-OLED-I2C-128x64-Display/
-
+  // TODO: remove this check
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Don't proceed, loop forever
@@ -118,7 +120,7 @@ void setup() {
   display.display();
   display.clearDisplay();
   display.setTextSize(1);
-  display.setTextColor(WHITE);
+  display.setTextColor(1);
   display.setCursor(0, 0);
   display.print(F("mixxx midi clock"));
   display.display();
@@ -127,10 +129,6 @@ void setup() {
 
   display.clearDisplay();
   display.display();
-
-  /* Draw a single pixel in white */
-  /* display.drawPixel(10, 10, SSD1306_WHITE); */
-  /* display.display(); */
 }
 
 void loop() {
@@ -148,17 +146,63 @@ void loop() {
   handleResumeFromTempoNudged();
 
   handleBPMLED();
+
   if (currentClockPulse == 24) {
     handleDrawUI();
   }
 }
 
 void handleDrawUI() {
-  display.setCursor(0, 16);
   display.setTextSize(1);
-  display.print(F("BPM: "));
-  display.print(getBPM());
+
+  display.setCursor(0, 0);
+  display.printf("%-16s", getClockStatusString());
+
+  displayPlayState();
+
+  display.setCursor(0, 16);
+  display.printf("%-5.2f", getBPM());
+
   display.display();
+}
+
+void displayPlayState() {
+  display.fillRect(119, 0, 8, 8, 0); // clear play state section
+  switch (currentPlayState) {
+  case playState::started:
+    display.drawTriangle(119, 6, 119, 0, 126, 3, 1);
+    break;
+  case playState::playing:
+    display.fillTriangle(119, 6, 119, 0, 126, 3, 1);
+    break;
+  case playState::paused:
+    display.drawFastVLine(121, 6, 6, 1);
+    display.drawFastVLine(123, 6, 6, 1);
+    break;
+  case playState::unpaused:
+    display.drawTriangle(119, 6, 119, 0, 126, 3, 1);
+    break;
+  case playState::stopped:
+    display.drawRect(119, 0, 6, 6, 1);
+    break;
+  default:
+    break;
+  }
+}
+
+char* getClockStatusString() {
+  switch (currentClockStatus) {
+  case clockStatus::free:
+    return "Free";
+  case clockStatus::syncing:
+    return "Syncing";
+  case clockStatus::syncing_complete:
+    return "Sync Complete";
+  case clockStatus::syncing_complete:
+    return "Synced to Mixxx";
+  default:
+    return "Unknown"
+  }
 }
 
 void initializeTimer() {
