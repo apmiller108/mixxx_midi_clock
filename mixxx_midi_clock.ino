@@ -143,10 +143,33 @@ void setup() {
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
 
-  // FOUR3, FOUR0 or TWO03
   jogKnob = new RotaryEncoder(3, 7, RotaryEncoder::LatchMode::FOUR3);
   attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE);
   attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE);
+  // TODO get a display up and running
+  //   See also https://www.instructables.com/Arduino-and-the-SSD1306-OLED-I2C-128x64-Display/
+
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
+  display.display();
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.print(F("mixxx midi clock"));
+  display.display();
+
+  delay(2000);
+
+  display.clearDisplay();
+  display.display();
+
+  /* Draw a single pixel in white */
+  /* display.drawPixel(10, 10, SSD1306_WHITE); */
+  /* display.display(); */
 }
 
 void loop() {
@@ -225,6 +248,17 @@ __FlashStringHelper* getClockStatusString() {
   default:
     return F("");
   }
+  if (currentClockPulse == 24) {
+    handleDrawUI();
+  }
+}
+
+void handleDrawUI() {
+  display.setCursor(0, 16);
+  display.setTextSize(1);
+  display.print(F("BPM: "));
+  display.print(getBPM());
+  display.display();
 }
 
 void initializeTimer() {
