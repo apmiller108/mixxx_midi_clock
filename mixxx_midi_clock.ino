@@ -135,6 +135,10 @@ void setup() {
   /* display.clearDisplay(); */
   /* display.display(); */
 
+  Serial.begin(31250);
+  while(!Serial) {
+
+  }
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
   initializeTimer();
@@ -146,30 +150,6 @@ void setup() {
   jogKnob = new RotaryEncoder(3, 7, RotaryEncoder::LatchMode::FOUR3);
   attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE);
   attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE);
-  // TODO get a display up and running
-  //   See also https://www.instructables.com/Arduino-and-the-SSD1306-OLED-I2C-128x64-Display/
-
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
-  }
-
-  display.display();
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 0);
-  display.print(F("mixxx midi clock"));
-  display.display();
-
-  delay(2000);
-
-  display.clearDisplay();
-  display.display();
-
-  /* Draw a single pixel in white */
-  /* display.drawPixel(10, 10, SSD1306_WHITE); */
-  /* display.display(); */
 }
 
 void loop() {
@@ -254,11 +234,56 @@ __FlashStringHelper* getClockStatusString() {
 }
 
 void handleDrawUI() {
-  display.setCursor(0, 16);
   display.setTextSize(1);
-  display.print(F("BPM: "));
-  display.print(getBPM());
+
+  display.setCursor(0, 0);
+  display.printf("%-16s", getClockStatusString());
+
+  displayPlayState();
+
+  display.setCursor(0, 16);
+  display.printf("%-5.2f", getBPM());
+
   display.display();
+}
+
+void displayPlayState() {
+  display.fillRect(119, 0, 8, 8, 0); // clear play state section
+  switch (currentPlayState) {
+  case playState::started:
+    display.drawTriangle(119, 6, 119, 0, 126, 3, 1);
+    break;
+  case playState::playing:
+    display.fillTriangle(119, 6, 119, 0, 126, 3, 1);
+    break;
+  case playState::paused:
+    display.drawFastVLine(121, 6, 6, 1);
+    display.drawFastVLine(123, 6, 6, 1);
+    break;
+  case playState::unpaused:
+    display.drawTriangle(119, 6, 119, 0, 126, 3, 1);
+    break;
+  case playState::stopped:
+    display.drawRect(119, 0, 6, 6, 1);
+    break;
+  default:
+    break;
+  }
+}
+
+char* getClockStatusString() {
+  switch (currentClockStatus) {
+  case clockStatus::free:
+    return "Free";
+  case clockStatus::syncing:
+    return "Syncing";
+  case clockStatus::syncing_complete:
+    return "Sync Complete";
+  case clockStatus::syncing_complete:
+    return "Synced to Mixxx";
+  default:
+    return "Unknown"
+  }
 }
 
 void initializeTimer() {
