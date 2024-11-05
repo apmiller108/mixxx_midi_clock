@@ -135,10 +135,6 @@ void setup() {
   /* display.clearDisplay(); */
   /* display.display(); */
 
-  Serial.begin(31250);
-  while(!Serial) {
-
-  }
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
   initializeTimer();
@@ -237,52 +233,56 @@ void handleDrawUI() {
   display.setTextSize(1);
 
   display.setCursor(0, 0);
-  display.printf("%-16s", getClockStatusString());
+  display.setTextSize(2);
+  display.print(getClockStatusString());
 
   displayPlayState();
 
-  display.setCursor(0, 16);
-  display.printf("%-5.2f", getBPM());
+  display.setCursor(10, 24);
+  display.setTextSize(3);
+  display.print(getBPM());
+
+  display.fillRect(0, 52, 128, 12, 0); // clear play state section
 
   display.display();
 }
 
 void displayPlayState() {
-  display.fillRect(119, 0, 8, 8, 0); // clear play state section
+  display.fillRect(111, 0, 16, 16, 0);
   switch (currentPlayState) {
   case playState::started:
-    display.drawTriangle(119, 6, 119, 0, 126, 3, 1);
+    display.drawTriangle(111, 15, 111, 0, 126, 8, 1);
     break;
   case playState::playing:
-    display.fillTriangle(119, 6, 119, 0, 126, 3, 1);
+    display.fillTriangle(111, 15, 111, 0, 126, 8, 1);
     break;
   case playState::paused:
-    display.drawFastVLine(121, 6, 6, 1);
-    display.drawFastVLine(123, 6, 6, 1);
+    display.drawFastVLine(112, 0, 16, 1);
+    display.drawFastVLine(126, 0, 16, 1);
     break;
   case playState::unpaused:
-    display.drawTriangle(119, 6, 119, 0, 126, 3, 1);
+    display.drawTriangle(111, 15, 111, 0, 126, 8, 1);
     break;
   case playState::stopped:
-    display.drawRect(119, 0, 6, 6, 1);
+    display.fillRect(111, 0, 16, 16, 1);
     break;
   default:
     break;
   }
 }
 
-char* getClockStatusString() {
+__FlashStringHelper* getClockStatusString() {
   switch (currentClockStatus) {
   case clockStatus::free:
-    return "Free";
+    return F("Free");
   case clockStatus::syncing:
-    return "Syncing";
+    return F("Syncing");
   case clockStatus::syncing_complete:
-    return "Sync Complete";
-  case clockStatus::syncing_complete:
-    return "Synced to Mixxx";
+    return F("Syncing");
+  case clockStatus::synced_to_mixxx:
+    return F("Synced");
   default:
-    return "Unknown"
+    return F("");
   }
 }
 
