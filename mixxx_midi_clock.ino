@@ -85,11 +85,10 @@ NewEncoder jogKnob(3, 7, -100, 100, 0, FULL_PULSE);
 long previousJogKnobValue;
 bool volatile tempoNudged = false;
 int volatile tempoNudgedAtClockPulse = 0;
-int volatile tempoNudgedClockPulseInterval = 6; // Tempo nudges lasts for 1/16th note.
 int volatile resumeFromTempoNudge = false;
 
-const int SCREEN_WIDTH = 128;
-const int SCREEN_HEIGHT = 64;
+const byte SCREEN_WIDTH = 128;
+const byte SCREEN_HEIGHT = 64;
 const int OLED_RESET = -1;
 const byte SCREEN_ADDRESS = 0x3C;
 
@@ -98,29 +97,20 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 midiEventPacket_t rx;
 
 void setup() {
-  Serial.begin(31250);
-  while(!Serial) {
+  /* Serial.begin(31250); */
+  /* while(!Serial) { */
 
-  }
-  MIDI.begin(MIDI_CHANNEL_OMNI);
-  jogKnob.begin();
-
-  initializeTimer();
-
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(PLAY_BUTTON, INPUT);
-  pinMode(STOP_BUTTON, INPUT);
-
+  /* } */
   // TODO: remove this check
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println(F("SSD1306 allocation failed"));
+    /* Serial.println(F("SSD1306 allocation failed")); */
     for(;;); // Don't proceed, loop forever
   }
 
   display.display();
   display.clearDisplay();
   display.setTextSize(1);
-  display.setTextColor(1);
+  display.setTextColor(1, 0);
   display.setCursor(0, 0);
   display.print(F("mixxx midi clock"));
   display.display();
@@ -129,6 +119,15 @@ void setup() {
 
   display.clearDisplay();
   display.display();
+
+  MIDI.begin(MIDI_CHANNEL_OMNI);
+  jogKnob.begin();
+
+  initializeTimer();
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(PLAY_BUTTON, INPUT);
+  pinMode(STOP_BUTTON, INPUT);
 }
 
 void loop() {
@@ -156,52 +155,56 @@ void handleDrawUI() {
   display.setTextSize(1);
 
   display.setCursor(0, 0);
-  display.printf("%-16s", getClockStatusString());
+  display.setTextSize(2);
+  display.print(getClockStatusString());
 
   displayPlayState();
 
-  display.setCursor(0, 16);
-  display.printf("%-5.2f", getBPM());
+  display.setCursor(10, 24);
+  display.setTextSize(3);
+  display.print(getBPM());
+
+  display.fillRect(0, 52, 128, 12, 0); // clear play state section
 
   display.display();
 }
 
 void displayPlayState() {
-  display.fillRect(119, 0, 8, 8, 0); // clear play state section
+  display.fillRect(111, 0, 16, 16, 0);
   switch (currentPlayState) {
   case playState::started:
-    display.drawTriangle(119, 6, 119, 0, 126, 3, 1);
+    display.drawTriangle(111, 15, 111, 0, 126, 8, 1);
     break;
   case playState::playing:
-    display.fillTriangle(119, 6, 119, 0, 126, 3, 1);
+    display.fillTriangle(111, 15, 111, 0, 126, 8, 1);
     break;
   case playState::paused:
-    display.drawFastVLine(121, 6, 6, 1);
-    display.drawFastVLine(123, 6, 6, 1);
+    display.drawFastVLine(112, 0, 16, 1);
+    display.drawFastVLine(126, 0, 16, 1);
     break;
   case playState::unpaused:
-    display.drawTriangle(119, 6, 119, 0, 126, 3, 1);
+    display.drawTriangle(111, 15, 111, 0, 126, 8, 1);
     break;
   case playState::stopped:
-    display.drawRect(119, 0, 6, 6, 1);
+    display.fillRect(111, 0, 16, 16, 1);
     break;
   default:
     break;
   }
 }
 
-char* getClockStatusString() {
+__FlashStringHelper* getClockStatusString() {
   switch (currentClockStatus) {
   case clockStatus::free:
-    return "Free";
+    return F("Free");
   case clockStatus::syncing:
-    return "Syncing";
+    return F("Syncing");
   case clockStatus::syncing_complete:
-    return "Sync Complete";
-  case clockStatus::syncing_complete:
-    return "Synced to Mixxx";
+    return F("Syncing");
+  case clockStatus::synced_to_mixxx:
+    return F("Synced");
   default:
-    return "Unknown"
+    return F("");
   }
 }
 
@@ -249,7 +252,7 @@ ISR(TIMER1_COMPA_vect) {
     int clockPulsesSinceTempoNudged = ((currentClockPulse - tempoNudgedAtClockPulse - 1) \
                                          % PPQ + PPQ) % PPQ + 1;
 
-    if (clockPulsesSinceTempoNudged >= tempoNudgedClockPulseInterval) {
+    if (clockPulsesSinceTempoNudged >= 6) { // 1/16th note
       resumeFromTempoNudge = true;
     }
   }
