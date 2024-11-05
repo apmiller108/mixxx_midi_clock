@@ -16,8 +16,6 @@
 #include "MIDIUSB.h"    // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h>       // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
 #include <NewEncoder.h> // https://github.com/gfvalvo/NewEncoder (MIT?)
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -87,21 +85,12 @@ int volatile tempoNudgedAtClockPulse = 0;
 int volatile tempoNudgedClockPulseInterval = 6; // Tempo nudges lasts for 1/16th note.
 int volatile resumeFromTempoNudge = false;
 
-
-const byte SCREEN_WIDTH = 128; 
-const byte SCREEN_HEIGHT = 64; 
-const int OLED_RESET = -1;
-const byte SCREEN_ADDRESS = 0x3C;
-
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
 midiEventPacket_t rx;
 
 void setup() {
-  Serial.begin(31250);
-  while(!Serial) {
-    
-  }
+  /* Serial.begin(31250); */
+  /* while(!Serial) { */
+  /* } */
   MIDI.begin(MIDI_CHANNEL_OMNI);
   jogKnob.begin();
 
@@ -110,29 +99,6 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
-
-  // TODO get a display up and running
-  //   See also https://www.instructables.com/Arduino-and-the-SSD1306-OLED-I2C-128x64-Display/
-
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
-  }
-
-  // Clear the buffer
-  display.clearDisplay();
-  delay(2000); // Pause for 2 seconds
-
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 0);
-  // Display static text
-  display.println("Hello, world!");
-  display.display(); 
-
-  // Draw a single pixel in white
-  /* display.drawPixel(10, 10, SSD1306_WHITE); */
-  /* display.display(); */
 }
 
 void loop() {
