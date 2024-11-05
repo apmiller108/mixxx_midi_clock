@@ -12,12 +12,15 @@
 // first complete quarter note will be for beat 2. Actually, seems to think beat
 // 1 is mixxx's beat 4.
 
-#include "MIDIUSB.h" // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
-#include <MIDI.h> // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
+#include <MIDI.h>       // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
+#include <USB-MIDI.h>   // https://github.com/lathoub/Arduino-USBMIDI (MIT)
 #include <RotaryEncoder.h> // https://github.com/mathertel/RotaryEncoder (BSD)
 #include <lcdgfx.h> // https://github.com/lexus2k/lcdgfx (MIT)
 
 MIDI_CREATE_DEFAULT_INSTANCE();
+
+USBMIDI_NAMESPACE::usbMidiTransport usbMIDI2();
+MIDI_NAMESPACE::MidiInterface<USBMIDI_NAMESPACE::usbMidiTransport> MIDI2((USBMIDI_NAMESPACE::usbMidiTransport&)usbMIDI2);
 
 #define DEBUG 0
 
@@ -36,11 +39,6 @@ const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
 
 const float DEFAULT_BPM = 122;
-
-const byte MIDI_START = 0xFA;
-const byte MIDI_CONT = 0xFB;
-const byte MIDI_STOP = 0xFC;
-const byte MIDI_CLOCK = 0xF8;
 
 enum class clockStatus {
   free,
@@ -122,7 +120,7 @@ void setup() {
 void loop() {
   onSyncComplete();
 
-  readMidiUSB();
+  usbMIDI2.read();
 
   handlePlayButton();
   handleStopButton();
@@ -238,78 +236,60 @@ void configureTimer(float intervalMicros) {
   }
 }
 
-void readMidiUSB() {
-  do {
-    rx = MidiUSB.read();
-    if (rx.header != 0) {
-      debug("Received: ");
-      debug(rx.header);
-      debug("-");
-      debug(rx.byte1);
-      debug("-");
-      debug(rx.byte2);
-      debug("-");
-      debugln(rx.byte3);
+void onNoteOn(byte channel, byte note, byte velocity) {
+  if (note == 0x34) {
+    // The Mixxx controller script subtracts 50 from the BPM so it fits in a
+    // 0-127 midi range. So, 50 is added to the value to get the actual BPM.
+    mixxxBPMWhole = velocity + 50;
+  }
 
-      if (rx.byte2 == 0x34) {
-        // The Mixxx controller script subtracts 50 from the BPM so it fits in a
-        // 0-127 midi range. So, 50 is added to the value to get the actual BPM.
-        mixxxBPMWhole = rx.byte3 + 50;
-      }
+  if (note == 0x35) {
+    mixxxBPMFractional = velocity / 100.0;
+  }
 
-      if (rx.byte2 == 0x35) {
-        mixxxBPMFractional = rx.byte3 / 100.0;
-      }
+  float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
+  if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
+    mixxxBPM = newMixxxBPM;
+    float intervalMicros = bpmToIntervalUS(mixxxBPM);
+    configureTimer(intervalMicros);
+    updateUIBPM = true;
+  }
 
-      float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
-      if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
-        mixxxBPM = newMixxxBPM;
-        float intervalMicros = bpmToIntervalMicros(mixxxBPM);
-        configureTimer(intervalMicros);
-        updateUIBPM = true;
-      }
+  if (note == 0x32) {
+    if (!receivingMidi) {
+      // Start next pulse when the next beat is predicted to happen
+      // This should only be needed once.
 
-      if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
-        if (!receivingMidi) {
-          // Start next pulse when the next beat is predicted to happen
-          // This should only be needed once.
+      // beat_distance value from Mixxx is a number between 0 and 1. It
+      // represents the distance from the previous beat marker. It is
+      // multiplied by 127 in order to pass it as a midi value, so it is
+      // divided here in order to get the original float value.
+      float beatDistance = 1 - (velocity / 127.0);
+      float beatLength =  MICROS_PER_MIN / mixxxBPM;
 
-          // beat_distance value from Mixxx is a number between 0 and 1. It
-          // represents the distance from the previous beat marker. It is
-          // multiplied by 127 in order to pass it as a midi value, so it is
-          // divided here in order to get the original float value.
-          float beatDistance = 1 - (rx.byte3 / 127.0);
-          float beatLength =  MICROS_PER_MIN / mixxxBPM;
+      // Next tick starts in the in micro seconds to the next beat.
+      // This assumes getting this message on beat_active for the first beat
+      // in a measure. Maybe corrections can be made as needed by adjusting
+      // the phase.
+      float startIn = (beatLength * beatDistance);
+      configureTimer(startIn);
+      currentClockStatus = clockStatus::syncing;
+      currentClockPulse = 1;
+      barPosition = 1;
 
-          // Next tick starts in the in micro seconds to the next beat.
-          // This assumes getting this message on beat_active for the first beat
-          // in a measure. Maybe corrections can be made as needed by adjusting
-          // the phase.
-          float startIn = (beatLength * beatDistance);
-          configureTimer(startIn);
-          currentClockStatus = clockStatus::syncing;
-          currentClockPulse = 1;
-          barPosition = 1;
-
-          receivingMidi = true;
-        }
-      }
+      receivingMidi = true;
     }
-  } while (rx.header != 0);
+  }
 }
 
 void sendMidiClock() {
   MIDI.sendRealTime(midi::Clock);
-  midiEventPacket_t clockEvent ={0x0F, MIDI_CLOCK, 0x00, 0x00};
-  MidiUSB.sendMIDI(clockEvent);
-  MidiUSB.flush();
+  usbMIDI2.sendRealTime(midi::Clock);
 }
 
 void sendMidiTransportMessage(byte message) {
   MIDI.sendRealTime(message);
-  midiEventPacket_t transportEvent ={0x0F, message, 0x00, 0x00};
-  MidiUSB.sendMIDI(transportEvent);
-  MidiUSB.flush();
+  usbMIDI2.sendRealTime(message);
 }
 
 boolean playButtonRising() {
@@ -328,7 +308,7 @@ void handlePlayButton() {
       currentPlayState = playState::started; // Will start on beat 1
       break;
     case playState::playing:
-      sendMidiTransportMessage(MIDI_STOP);
+      sendMidiTransportMessage(midi::Stop);
       currentPlayState = playState::paused;
       pausePosition = barPosition;
       break;
@@ -353,7 +333,7 @@ void handlePlayButton() {
 // Resume playing at the same position in the bar when paused.
 void handleContinue() {
   if (currentPlayState == playState::unpaused && pausePosition == barPosition) {
-    sendMidiTransportMessage(MIDI_CONT);
+    sendMidiTransportMessage(midi::Continue);
     currentPlayState = playState::playing;
     updateUIClockStatus = true;
   }
@@ -362,7 +342,7 @@ void handleContinue() {
 // Always start on beat 1
 void handleStart() {
   if (currentPlayState == playState::started && barPosition == 96) {
-    sendMidiTransportMessage(MIDI_START);
+    sendMidiTransportMessage(midi::Start);
     currentPlayState = playState::playing;
     updateUIPlayStatus = true;
   }
