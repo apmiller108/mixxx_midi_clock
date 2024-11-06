@@ -16,9 +16,6 @@
 #include "MIDIUSB.h" // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h> // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
 #include <RotaryEncoder.h> // https://github.com/mathertel/RotaryEncoder (BSD)
-/* #include <Adafruit_GFX.h> */
-/* #define SSD1306_NO_SPLASH // Disables Adafruit splash screen */
-/* #include <Adafruit_SSD1306.h> */
 #include <lcdgfx.h>
 
 MIDI_CREATE_DEFAULT_INSTANCE();
@@ -87,13 +84,6 @@ bool volatile tempoNudged = false;
 int volatile tempoNudgedAtClockPulse = 0;
 int volatile resumeFromTempoNudge = false;
 
-/* const byte SCREEN_WIDTH = 128; */
-/* const byte SCREEN_HEIGHT = 64; */
-/* const int OLED_RESET = -1; */
-/* const byte SCREEN_ADDRESS = 0x3C; */
-
-/* Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET); */
-
 DisplaySSD1306_128x64_I2C display(-1); // -1 means default I2C address (0x3C)
 
 midiEventPacket_t rx;
@@ -102,20 +92,6 @@ void setup() {
   /* Serial.begin(31250); */
   /* while(!Serial) { */
 
-  /* } */
-  // TODO: remove this check
-  /* if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) { */
-  /*   /\* Serial.println(F("SSD1306 allocation failed")); *\/ */
-  /*   for(;;); // Don't proceed, loop forever */
-  /* } */
-
-  /* display.display(); */
-  /* display.clearDisplay(); */
-  /* display.setTextSize(1); */
-  /* display.setTextColor(1, 0); */
-  /* display.setCursor(0, 0); */
-  /* display.print(F("mixxx midi clock")); */
-  /* display.display(); */
   display.begin();
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
@@ -123,11 +99,10 @@ void setup() {
   display.printFixed(0,  8, "Normal text", STYLE_NORMAL);
   display.printFixed(0, 16, "Bold text", STYLE_BOLD);
   display.printFixed(0, 24, "Italic text", STYLE_ITALIC);
-  display.invertColors();
-  display.printFixed(0, 32, "Inverted bold", STYLE_BOLD);
-  display.invertColors();
   display.setTextCursor(0, 40);
-  display.print(getBPM());
+  char bpmb[7];
+  dtostrf(getBPM(), 6, 2, bpmb);
+  display.printFixed(0, 40, bpmb);
   display.drawLine(0,48,127,48);
 
   /* delay(2000); */
@@ -187,104 +162,47 @@ void loop() {
 /*   display.display(); */
 /* } */
 
-void displayPlayState() {
-  display.fillRect(111, 0, 16, 16, 0);
-  switch (currentPlayState) {
-  case playState::started:
-    display.drawTriangle(111, 15, 111, 0, 126, 8, 1);
-    break;
-  case playState::playing:
-    display.fillTriangle(111, 15, 111, 0, 126, 8, 1);
-    break;
-  case playState::paused:
-    display.drawFastVLine(112, 0, 16, 1);
-    display.drawFastVLine(126, 0, 16, 1);
-    break;
-  case playState::unpaused:
-    display.drawTriangle(111, 15, 111, 0, 126, 8, 1);
-    break;
-  case playState::stopped:
-    display.fillRect(111, 0, 16, 16, 1);
-    break;
-  default:
-    break;
-  }
-}
+/* void displayPlayState() { */
+/*   display.fillRect(111, 0, 16, 16, 0); */
+/*   switch (currentPlayState) { */
+/*   case playState::started: */
+/*     display.drawTriangle(111, 15, 111, 0, 126, 8, 1); */
+/*     break; */
+/*   case playState::playing: */
+/*     display.fillTriangle(111, 15, 111, 0, 126, 8, 1); */
+/*     break; */
+/*   case playState::paused: */
+/*     display.drawFastVLine(112, 0, 16, 1); */
+/*     display.drawFastVLine(126, 0, 16, 1); */
+/*     break; */
+/*   case playState::unpaused: */
+/*     display.drawTriangle(111, 15, 111, 0, 126, 8, 1); */
+/*     break; */
+/*   case playState::stopped: */
+/*     display.fillRect(111, 0, 16, 16, 1); */
+/*     break; */
+/*   default: */
+/*     break; */
+/*   } */
+/* } */
 
-__FlashStringHelper* getClockStatusString() {
-  switch (currentClockStatus) {
-  case clockStatus::free:
-    return F("Free");
-  case clockStatus::syncing:
-    return F("Syncing");
-  case clockStatus::syncing_complete:
-    return F("Syncing");
-  case clockStatus::synced_to_mixxx:
-    return F("Synced");
-  default:
-    return F("");
-  }
-  if (currentClockPulse == 24) {
-    handleDrawUI();
-  }
-}
-
-void handleDrawUI() {
-  display.setTextSize(1);
-
-  display.setCursor(0, 0);
-  display.setTextSize(2);
-  display.print(getClockStatusString());
-
-  displayPlayState();
-
-  display.setCursor(10, 24);
-  display.setTextSize(3);
-  display.print(getBPM());
-
-  display.fillRect(0, 52, 128, 12, 0); // clear play state section
-
-  display.display();
-}
-
-void displayPlayState() {
-  display.fillRect(111, 0, 16, 16, 0);
-  switch (currentPlayState) {
-  case playState::started:
-    display.drawTriangle(111, 15, 111, 0, 126, 8, 1);
-    break;
-  case playState::playing:
-    display.fillTriangle(111, 15, 111, 0, 126, 8, 1);
-    break;
-  case playState::paused:
-    display.drawFastVLine(112, 0, 16, 1);
-    display.drawFastVLine(126, 0, 16, 1);
-    break;
-  case playState::unpaused:
-    display.drawTriangle(111, 15, 111, 0, 126, 8, 1);
-    break;
-  case playState::stopped:
-    display.fillRect(111, 0, 16, 16, 1);
-    break;
-  default:
-    break;
-  }
-}
-
-__FlashStringHelper* getClockStatusString() {
-  switch (currentClockStatus) {
-  case clockStatus::free:
-    return F("Free");
-  case clockStatus::syncing:
-    return F("Syncing");
-  case clockStatus::syncing_complete:
-    return F("Syncing");
-  case clockStatus::synced_to_mixxx:
-    return F("Synced");
-  default:
-    return F("");
-  }
-}
+/* __FlashStringHelper* getClockStatusString() { */
+/*   switch (currentClockStatus) { */
+/*   case clockStatus::free: */
+/*     return F("Free"); */
+/*   case clockStatus::syncing: */
+/*     return F("Syncing"); */
+/*   case clockStatus::syncing_complete: */
+/*     return F("Syncing"); */
+/*   case clockStatus::synced_to_mixxx: */
+/*     return F("Synced"); */
+/*   default: */
+/*     return F(""); */
+/*   } */
+/*   if (currentClockPulse == 24) { */
+/*     handleDrawUI(); */
+/*   } */
+/* } */
 
 void initializeTimer() {
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
