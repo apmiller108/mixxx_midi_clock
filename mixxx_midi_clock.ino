@@ -59,7 +59,7 @@ float mixxxBPM = 0;
 int mixxxBPMWhole;
 float mixxxBPMFractional;
 
-const int PLAY_BUTTON = 2;
+const int PLAY_BUTTON = 8;
 const int STOP_BUTTON = 4;
 enum class playState {
   started,
@@ -86,14 +86,10 @@ int volatile resumeFromTempoNudge = false;
 
 midiEventPacket_t rx;
 
-void checkJogKnobPosition() {
-  jogKnob->tick(); // updates the encoder's state
-}
-
 void setup() {
-  Serial.begin(31250);
-  while(!Serial) {
-  }
+  /* Serial.begin(31250); */
+  /* while(!Serial) { */
+  /* } */
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
   initializeTimer();
@@ -104,8 +100,8 @@ void setup() {
 
   // FOUR3, FOUR0 or TWO03
   jogKnob = new RotaryEncoder(3, 7, RotaryEncoder::LatchMode::FOUR3);
-  attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE)
-  attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE)
+  attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE);
 }
 
 void loop() {
@@ -366,6 +362,11 @@ void handleStopButton() {
   previousStopButtonState = stopButtonState;
 }
 
+// Interrupt function that updates the encoder's state
+void checkJogKnobPosition() {
+  jogKnob->tick();
+}
+
 // Encoder driven in order to mimic a DJ jog wheel as much as this is possible
 // with a midi clock (eg, no going backwards). Used to nudge the tempo up and
 // down temporarily in order to change the phase of the clock.
@@ -374,15 +375,19 @@ void handleJogKnob() {
 
   jogKnob->tick();
 
-  int newPosition = jogKnob.getPosition();
+  int newPosition = jogKnob->getPosition();
 
   if (position != newPosition) {
-    // 0: No rotation, 1: clockwise, -1: couter clockwise
-    int direction = jogKnob.getDirection();
-    if (direction == 1) {
+    switch (jogKnob->getDirection()) {
+    case RotaryEncoder::Direction::CLOCKWISE:
       nudgeTempo(0.9);
-    } else if (direction == -1) {
-      nudgeTempo(1.10);
+      break;
+    case RotaryEncoder::Direction::COUNTERCLOCKWISE:
+      nudgeTempo(1.1);
+      break;
+    default:
+      // NOROTATION
+      break;
     }
   }
 }
