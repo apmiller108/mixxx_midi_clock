@@ -13,9 +13,9 @@
 // TODO Feature add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 // TODO Refactor: change US to Micros. Be consistent.
 
-#include "MIDIUSB.h"        // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
-#include <MIDI.h>           // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
-#include <RotaryEncoder.h>  // https://github.com/mathertel/RotaryEncoder
+#include "MIDIUSB.h" // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
+#include <MIDI.h> // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
+#include <RotaryEncoder.h> // https://github.com/mathertel/RotaryEncoder (BSD)
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
