@@ -13,9 +13,9 @@
 // TODO Feature add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 // TODO Refactor: change US to Micros. Be consistent.
 
-#include "MIDIUSB.h"    // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
-#include <MIDI.h>       // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
-#include <NewEncoder.h> // https://github.com/gfvalvo/NewEncoder (MIT?)
+#include "MIDIUSB.h"        // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
+#include <MIDI.h>           // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
+#include <RotaryEncoder.h>  // https://github.com/mathertel/RotaryEncoder
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -78,8 +78,7 @@ bool shouldContinue = false;
 unsigned long lastDebounceTimeMs = 0;
 unsigned long debounceDelayMs = 200;
 
-NewEncoder jogKnob(3, 7, -100, 100, 0, FULL_PULSE);
-long previousJogKnobValue;
+RotaryEncoder *jogKnob = nullptr;
 bool volatile tempoNudged = false;
 int volatile tempoNudgedAtClockPulse = 0;
 int volatile tempoNudgedClockPulseInterval = 6; // Tempo nudges lasts for 1/16th note.
@@ -87,18 +86,26 @@ int volatile resumeFromTempoNudge = false;
 
 midiEventPacket_t rx;
 
+void checkJogKnobPosition() {
+  jogKnob->tick(); // updates the encoder's state
+}
+
 void setup() {
-  /* Serial.begin(31250); */
-  /* while(!Serial) { */
-  /* } */
+  Serial.begin(31250);
+  while(!Serial) {
+  }
   MIDI.begin(MIDI_CHANNEL_OMNI);
-  jogKnob.begin();
 
   initializeTimer();
 
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
+
+  // FOUR3, FOUR0 or TWO03
+  jogKnob = new RotaryEncoder(3, 7, RotaryEncoder::LatchMode::FOUR3);
+  attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE)
+  attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE)
 }
 
 void loop() {
@@ -363,23 +370,20 @@ void handleStopButton() {
 // with a midi clock (eg, no going backwards). Used to nudge the tempo up and
 // down temporarily in order to change the phase of the clock.
 void handleJogKnob() {
-  long currentValue;
-  NewEncoder::EncoderState currentState;
+  static int position = 0;
 
-  jogKnob.getState(currentState);
-  currentValue = currentState.currentValue;
+  jogKnob->tick();
 
-  if (previousJogKnobValue != currentValue) {
-    if (currentValue > previousJogKnobValue) {
+  int newPosition = jogKnob.getPosition();
+
+  if (position != newPosition) {
+    // 0: No rotation, 1: clockwise, -1: couter clockwise
+    int direction = jogKnob.getDirection();
+    if (direction == 1) {
       nudgeTempo(0.9);
-    } else {
+    } else if (direction == -1) {
       nudgeTempo(1.10);
     }
-    previousJogKnobValue = currentValue;
-  } else if (currentState.currentClick == NewEncoder::UpClick) {
-    nudgeTempo(0.9);
-  } else if (currentState.currentClick == NewEncoder::DownClick) {
-    nudgeTempo(1.10);
   }
 }
 
