@@ -13,19 +13,13 @@
 // TODO Feature add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 // TODO Refactor: change US to Micros. Be consistent.
 
-<<<<<<< HEAD
-#include "MIDIUSB.h"    // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
-#include <MIDI.h>       // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
-#include <NewEncoder.h> // https://github.com/gfvalvo/NewEncoder (MIT?)
+#include "MIDIUSB.h"        // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
+#include <MIDI.h>           // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
+#include <RotaryEncoder.h>  // https://github.com/mathertel/RotaryEncoder
 /* #include <Adafruit_GFX.h> */
 /* #define SSD1306_NO_SPLASH // Disables Adafruit splash screen */
 /* #include <Adafruit_SSD1306.h> */
 #include <lcdgfx.h>
-=======
-#include "MIDIUSB.h"        // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
-#include <MIDI.h>           // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
-#include <RotaryEncoder.h>  // https://github.com/mathertel/RotaryEncoder
->>>>>>> 7faf150 (Uses RotaryEncoder lib)
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -104,12 +98,7 @@ DisplaySSD1306_128x64_I2C display(-1); // -1 means default I2C address (0x3C)
 
 midiEventPacket_t rx;
 
-void checkJogKnobPosition() {
-  jogKnob->tick(); // updates the encoder's state
-}
-
 void setup() {
-<<<<<<< HEAD
   /* Serial.begin(31250); */
   /* while(!Serial) { */
 
@@ -146,11 +135,6 @@ void setup() {
   /* display.clearDisplay(); */
   /* display.display(); */
 
-=======
-  Serial.begin(31250);
-  while(!Serial) {
-  }
->>>>>>> 7faf150 (Uses RotaryEncoder lib)
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
   initializeTimer();
@@ -161,8 +145,8 @@ void setup() {
 
   // FOUR3, FOUR0 or TWO03
   jogKnob = new RotaryEncoder(3, 7, RotaryEncoder::LatchMode::FOUR3);
-  attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE)
-  attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE)
+  attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE);
 }
 
 void loop() {
@@ -484,6 +468,11 @@ void handleStopButton() {
   previousStopButtonState = stopButtonState;
 }
 
+// Interrupt function that updates the encoder's state
+void checkJogKnobPosition() {
+  jogKnob->tick();
+}
+
 // Encoder driven in order to mimic a DJ jog wheel as much as this is possible
 // with a midi clock (eg, no going backwards). Used to nudge the tempo up and
 // down temporarily in order to change the phase of the clock.
@@ -492,15 +481,19 @@ void handleJogKnob() {
 
   jogKnob->tick();
 
-  int newPosition = jogKnob.getPosition();
+  int newPosition = jogKnob->getPosition();
 
   if (position != newPosition) {
-    // 0: No rotation, 1: clockwise, -1: couter clockwise
-    int direction = jogKnob.getDirection();
-    if (direction == 1) {
+    switch (jogKnob->getDirection()) {
+    case RotaryEncoder::Direction::CLOCKWISE:
       nudgeTempo(0.9);
-    } else if (direction == -1) {
-      nudgeTempo(1.10);
+      break;
+    case RotaryEncoder::Direction::COUNTERCLOCKWISE:
+      nudgeTempo(1.1);
+      break;
+    default:
+      // NOROTATION
+      break;
     }
   }
 }
