@@ -96,19 +96,11 @@ void setup() {
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
   display.setColor(1);
-  display.printFixed(0,  8, "Normal text", STYLE_NORMAL);
-  display.printFixed(0, 16, "Bold text", STYLE_BOLD);
-  display.printFixed(0, 24, "Italic text", STYLE_ITALIC);
-  display.setTextCursor(0, 40);
-  char bpmb[7];
-  dtostrf(getBPM(), 6, 2, bpmb);
-  display.printFixed(0, 40, bpmb);
-  display.drawLine(0,48,127,48);
+  display.printFixedN(0,  0, "Mixxx MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
 
-  /* delay(2000); */
+  delay(2000);
 
-  /* display.clearDisplay(); */
-  /* display.display(); */
+  display.clear();
 
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
@@ -140,69 +132,69 @@ void loop() {
   handleBPMLED();
 
   if (currentClockPulse == 24) {
-    /* handleDrawUI(); */
+    handleDrawUI();
   }
 }
 
-/* void handleDrawUI() { */
-/*   display.setTextSize(1); */
+void handleDrawUI() {
+  display.clear()
+  display.printFixedN(0, 0, getClockStatusString(), STYLE_NORMAL, FONT_SIZE_2X);
 
-/*   display.setCursor(0, 0); */
-/*   display.setTextSize(2); */
-/*   display.print(getClockStatusString()); */
+  displayPlayState();
 
-/*   displayPlayState(); */
+  char bpmb[7];
+  dtostrf(getBPM(), 6, 2, bpmb);
+  display.printFixedN(10, 24, bpmb, STYLE_NORMAL, FONT_SIZE_3X);
+  /* display.fillRect(0, 52, 128, 12, 0); // clear play state section */
+}
 
-/*   display.setCursor(10, 24); */
-/*   display.setTextSize(3); */
-/*   display.print(getBPM()); */
+void displayPlayState() {
+  /* display.fillRect(111, 0, 16, 16, 0); */
+  switch (currentPlayState) {
+  case playState::started:
+    drawStartingIcon();
+    break;
+  case playState::playing:
+    display.drawLine(111, 0, 111, 15);
+    display.drawLine(111, 0, 126, 8);
+    display.drawLine(111, 15, 126, 8);
+    break;
+  case playState::paused:
+    display.drawLine(112, 0, 112, 16);
+    display.drawLine(126, 0, 126, 16);
+    break;
+  case playState::unpaused:
+    drawStartingIcon();
+    break;
+  case playState::stopped:
+    display.fillRect(111, 0, 16, 16);
+    break;
+  default:
+    break;
+  }
+}
 
-/*   display.fillRect(0, 52, 128, 12, 0); // clear play state section */
+void drawStartingIcon() {
+  display.drawLine(111, 0, 111, 15)
+  display.drawLine(109, 0, 109, 15);
+  display.drawLine(109, 0, 126, 8);
+  display.drawLine(109, 15, 126, 8);
+}
 
-/*   display.display(); */
-/* } */
-
-/* void displayPlayState() { */
-/*   display.fillRect(111, 0, 16, 16, 0); */
-/*   switch (currentPlayState) { */
-/*   case playState::started: */
-/*     display.drawTriangle(111, 15, 111, 0, 126, 8, 1); */
-/*     break; */
-/*   case playState::playing: */
-/*     display.fillTriangle(111, 15, 111, 0, 126, 8, 1); */
-/*     break; */
-/*   case playState::paused: */
-/*     display.drawFastVLine(112, 0, 16, 1); */
-/*     display.drawFastVLine(126, 0, 16, 1); */
-/*     break; */
-/*   case playState::unpaused: */
-/*     display.drawTriangle(111, 15, 111, 0, 126, 8, 1); */
-/*     break; */
-/*   case playState::stopped: */
-/*     display.fillRect(111, 0, 16, 16, 1); */
-/*     break; */
-/*   default: */
-/*     break; */
-/*   } */
-/* } */
-
-/* __FlashStringHelper* getClockStatusString() { */
-/*   switch (currentClockStatus) { */
-/*   case clockStatus::free: */
-/*     return F("Free"); */
-/*   case clockStatus::syncing: */
-/*     return F("Syncing"); */
-/*   case clockStatus::syncing_complete: */
-/*     return F("Syncing"); */
-/*   case clockStatus::synced_to_mixxx: */
-/*     return F("Synced"); */
-/*   default: */
-/*     return F(""); */
-/*   } */
-/*   if (currentClockPulse == 24) { */
-/*     handleDrawUI(); */
-/*   } */
-/* } */
+__FlashStringHelper* getClockStatusString() {
+  switch (currentClockStatus) {
+  case clockStatus::free:
+    return F("Free");
+  case clockStatus::syncing:
+    return F("Syncing");
+  case clockStatus::syncing_complete:
+    return F("Syncing");
+  case clockStatus::synced_to_mixxx:
+    return F("Synced");
+  default:
+    return F("");
+  }
+}
 
 void initializeTimer() {
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
