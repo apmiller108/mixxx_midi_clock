@@ -85,6 +85,7 @@ int volatile tempoNudgedAtClockPulse = 0;
 int volatile resumeFromTempoNudge = false;
 
 DisplaySSD1306_128x64_I2C display(-1); // -1 means default I2C address (0x3C)
+bool updateUI = true;
 
 midiEventPacket_t rx;
 
@@ -96,7 +97,8 @@ void setup() {
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
   display.setColor(1);
-  display.printFixedN(0,  0, "Mixxx MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(0,  0, "Mixxx", STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(0,  16, "MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
 
   delay(2000);
 
@@ -131,68 +133,57 @@ void loop() {
 
   handleBPMLED();
 
-  if (currentClockPulse == 24) {
-    handleDrawUI();
+  if (updateUI) {
+    drawUI();
+    updateUI = false;
   }
 }
 
-void handleDrawUI() {
-  display.clear()
+void drawUI() {
+  display.clear();
   display.printFixedN(0, 0, getClockStatusString(), STYLE_NORMAL, FONT_SIZE_2X);
 
   displayPlayState();
 
   char bpmb[7];
   dtostrf(getBPM(), 6, 2, bpmb);
-  display.printFixedN(10, 24, bpmb, STYLE_NORMAL, FONT_SIZE_3X);
-  /* display.fillRect(0, 52, 128, 12, 0); // clear play state section */
+  display.printFixedN(26, 24, bpmb, STYLE_NORMAL, FONT_SIZE_2X);
 }
 
 void displayPlayState() {
-  /* display.fillRect(111, 0, 16, 16, 0); */
   switch (currentPlayState) {
   case playState::started:
-    drawStartingIcon();
+    display.printFixedN(100, 0, ">>", STYLE_NORMAL, FONT_SIZE_2X);
     break;
   case playState::playing:
-    display.drawLine(111, 0, 111, 15);
-    display.drawLine(111, 0, 126, 8);
-    display.drawLine(111, 15, 126, 8);
+    display.printFixedN(100, 0, "|>", STYLE_NORMAL, FONT_SIZE_2X);
     break;
   case playState::paused:
-    display.drawLine(112, 0, 112, 16);
-    display.drawLine(126, 0, 126, 16);
+    display.printFixedN(100, 0, "||", STYLE_NORMAL, FONT_SIZE_2X);
     break;
   case playState::unpaused:
-    drawStartingIcon();
+    display.printFixedN(100, 0, ">>", STYLE_NORMAL, FONT_SIZE_2X);
     break;
   case playState::stopped:
-    display.fillRect(111, 0, 16, 16);
+    display.printFixedN(100, 0, "[]", STYLE_NORMAL, FONT_SIZE_2X);
     break;
   default:
     break;
   }
 }
 
-void drawStartingIcon() {
-  display.drawLine(111, 0, 111, 15)
-  display.drawLine(109, 0, 109, 15);
-  display.drawLine(109, 0, 126, 8);
-  display.drawLine(109, 15, 126, 8);
-}
-
-__FlashStringHelper* getClockStatusString() {
+char* getClockStatusString() {
   switch (currentClockStatus) {
   case clockStatus::free:
-    return F("Free");
+    return "Free";
   case clockStatus::syncing:
-    return F("Syncing");
+    return "Syncing";
   case clockStatus::syncing_complete:
-    return F("Syncing");
+    return "Syncing";
   case clockStatus::synced_to_mixxx:
-    return F("Synced");
+    return "Synced";
   default:
-    return F("");
+    return "";
   }
 }
 
@@ -251,6 +242,7 @@ void onSyncComplete() {
   if (currentClockStatus == clockStatus::syncing_complete) {
     configureTimer(bpmToIntervalUS(mixxxBPM));
     currentClockStatus = clockStatus::synced_to_mixxx;
+    updateUI = true;
   }
 }
 
@@ -323,6 +315,8 @@ void readMidiUSB() {
         mixxxBPM = newMixxxBPM;
         float intervalMicros = bpmToIntervalUS(mixxxBPM);
         configureTimer(intervalMicros);
+        /* TODO debounce this */
+        updateUI = true;
       }
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
@@ -406,6 +400,7 @@ void handlePlayButton() {
       break;
     }
     lastDebounceTimeMs = millis();
+    updateUI = true;
   }
   previousPlayButtonState = playButtonState;
 }
@@ -415,6 +410,7 @@ void handleContinue() {
   if (currentPlayState == playState::unpaused && pausePosition == barPosition) {
     sendMidiTransportMessage(MIDI_CONT);
     currentPlayState = playState::playing;
+    updateUI = true;
   }
 }
 
@@ -423,6 +419,7 @@ void handleStart() {
   if (currentPlayState == playState::started && barPosition == 96) {
     sendMidiTransportMessage(MIDI_START);
     currentPlayState = playState::playing;
+    updateUI = true;
   }
 }
 
@@ -433,6 +430,7 @@ void handleStopButton() {
     currentPlayState = playState::stopped;
     shouldContinue = false;
     lastDebounceTimeMs = millis();
+    updateUI = true;
   }
   previousStopButtonState = stopButtonState;
 }
