@@ -10,13 +10,12 @@
 // even possible? Maybe assume the first message comes on beat one active. But the
 // first complete quarter note will be for beat 2. Actually, seems to think beat
 // 1 is mixxx's beat 4.
-// TODO Feature add screen to display bpm, phase offset, transport state and beat number in 4/4 time
 // TODO Refactor: change US to Micros. Be consistent.
 
 #include "MIDIUSB.h" // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h> // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
 #include <RotaryEncoder.h> // https://github.com/mathertel/RotaryEncoder (BSD)
-#include <lcdgfx.h>
+#include <lcdgfx.h> // https://github.com/lexus2k/lcdgfx (MIT)
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
