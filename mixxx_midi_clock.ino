@@ -1,9 +1,10 @@
-
 /*
  * mixxx_midi_clock.ino
  *
  * Created: 10/17/2024
  * Author: alex miller
+ * https://github.com/apmiller108/mixxx_midi_clock
+ *
  */
 
 // TODO UX: figure out what position to start at when first syncing to mixxx. Is it
@@ -143,6 +144,7 @@ void drawUI() {
     drawUIBPM();
 
     updateUI = false;
+    lastDrawUIDebounceTimeMs = millis();
   }
 }
 
@@ -333,17 +335,11 @@ void readMidiUSB() {
         mixxxBPM = newMixxxBPM;
         float intervalMicros = bpmToIntervalMicros(mixxxBPM);
         configureTimer(intervalMicros);
-        /* TODO debounce this */
         updateUI = true;
       }
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
         if (!receivingMidi) {
-          // TODO: determine if this is really needed. Maybe not if I can change
-          // the phase manually which probably something I will need to do
-          // anyway.
-
-
           // Start next pulse when the next beat is predicted to happen
           // This should only be needed once.
 
