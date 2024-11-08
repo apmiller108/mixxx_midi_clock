@@ -75,8 +75,8 @@ int previousPlayButtonState = LOW;
 int previousStopButtonState = LOW;
 bool shouldContinue = false;
 
-unsigned long lastDebounceTimeMs = 0;
-unsigned long debounceDelayMs = 200;
+unsigned long lastBtnDebounceTimeMs = 0;
+int debounceDelayMs = 200;
 
 RotaryEncoder *jogKnob = nullptr;
 bool volatile tempoNudged = false;
@@ -85,6 +85,7 @@ int volatile resumeFromTempoNudge = false;
 
 DisplaySSD1306_128x64_I2C display(-1); // -1 means default I2C address (0x3C)
 bool updateUI = true;
+unsigned long lastDrawUIDebounceTimeMs = 0;
 
 midiEventPacket_t rx;
 
@@ -131,59 +132,78 @@ void loop() {
   handleResumeFromTempoNudged();
 
   handleBPMLED();
+  drawUI();
+}
 
-  if (updateUI) {
-    drawUI();
+void drawUI() {
+  if (updateUI && ((millis() - lastDrawUIDebounceTimeMs) > debounceDelayMs)) {
+    /* display.clear(); */
+    drawUIClockStatus();
+
+    drawUIPlayState();
+    drawUIBPM();
+
     updateUI = false;
   }
 }
 
-void drawUI() {
-  display.clear();
-  display.printFixedN(0, 0, getClockStatusString(), STYLE_NORMAL, FONT_SIZE_2X);
-
-  displayPlayState();
-
-  char bpmb[7];
-  dtostrf(getBPM(), 6, 2, bpmb);
-  display.printFixedN(26, 24, bpmb, STYLE_NORMAL, FONT_SIZE_2X);
-}
-
-void displayPlayState() {
-  switch (currentPlayState) {
-  case playState::started:
-    display.printFixedN(100, 0, ">>", STYLE_NORMAL, FONT_SIZE_2X);
-    break;
-  case playState::playing:
-    display.printFixedN(100, 0, "|>", STYLE_NORMAL, FONT_SIZE_2X);
-    break;
-  case playState::paused:
-    display.printFixedN(100, 0, "||", STYLE_NORMAL, FONT_SIZE_2X);
-    break;
-  case playState::unpaused:
-    display.printFixedN(100, 0, ">>", STYLE_NORMAL, FONT_SIZE_2X);
-    break;
-  case playState::stopped:
-    display.printFixedN(100, 0, "[]", STYLE_NORMAL, FONT_SIZE_2X);
-    break;
-  default:
-    break;
-  }
-}
-
-char* getClockStatusString() {
+void drawUIClockStatus() {
+  char* clockStatus;
   switch (currentClockStatus) {
   case clockStatus::free:
-    return "Free";
+    clockStatus = "Free";
+    break;
   case clockStatus::syncing:
-    return "Syncing";
+    clockStatus = "Syncing";
+    break;
   case clockStatus::syncing_complete:
-    return "Syncing";
+    clockStatus = "Syncing";
+    break;
   case clockStatus::synced_to_mixxx:
-    return "Synced";
+    clockStatus = "Synced";
+    break;
   default:
-    return "";
+    clockStatus = "";
+    break;
   }
+  display.setColor(0);
+  display.fillRect(0, 0, 36, 16);
+  display.setColor(1);
+  display.printFixedN(0, 0, clockStatus, STYLE_NORMAL, FONT_SIZE_2X);
+}
+
+void drawUIBPM() {
+  char bpmString[7];
+  dtostrf(getBPM(), 6, 2, bpmString);
+  display.printFixedN(26, 24, bpmString, STYLE_NORMAL, FONT_SIZE_2X);
+}
+
+void drawUIPlayState() {
+  char* icon;
+  switch (currentPlayState) {
+  case playState::started:
+    icon = "▷";
+    break;
+  case playState::playing:
+    icon = "▶";
+    break;
+  case playState::paused:
+    icon = "||";
+    break;
+  case playState::unpaused:
+    icon = "▷";
+    break;
+  case playState::stopped:
+    icon = "[]";
+    break;
+  default:
+    icon = "";
+    break;
+  }
+  display.setColor(0);
+  display.fillRect(100, 0, 12, 16);
+  display.setColor(1);
+  display.printFixedN(100, 0, icon, STYLE_NORMAL, FONT_SIZE_2X);
 }
 
 void initializeTimer() {
@@ -376,7 +396,7 @@ boolean stopButtonRising() {
 
 void handlePlayButton() {
   playButtonState = digitalRead(PLAY_BUTTON);
-  if (playButtonRising() && (millis() - lastDebounceTimeMs) > debounceDelayMs) {
+  if (playButtonRising() && (millis() - lastBtnDebounceTimeMs) > debounceDelayMs) {
     switch (currentPlayState) {
     case playState::stopped:
       currentPlayState = playState::started; // Will start on beat 1
@@ -398,7 +418,7 @@ void handlePlayButton() {
     default:
       break;
     }
-    lastDebounceTimeMs = millis();
+    lastBtnDebounceTimeMs = millis();
     updateUI = true;
   }
   previousPlayButtonState = playButtonState;
@@ -424,11 +444,11 @@ void handleStart() {
 
 void handleStopButton() {
   stopButtonState = digitalRead(STOP_BUTTON);
-  if (stopButtonRising() && ((millis() - lastDebounceTimeMs) > debounceDelayMs)) {
+  if (stopButtonRising() && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
     sendMidiTransportMessage(MIDI_STOP);
     currentPlayState = playState::stopped;
     shouldContinue = false;
-    lastDebounceTimeMs = millis();
+    lastBtnDebounceTimeMs = millis();
     updateUI = true;
   }
   previousStopButtonState = stopButtonState;
