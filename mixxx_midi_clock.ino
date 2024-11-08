@@ -10,7 +10,6 @@
 // even possible? Maybe assume the first message comes on beat one active. But the
 // first complete quarter note will be for beat 2. Actually, seems to think beat
 // 1 is mixxx's beat 4.
-// TODO Refactor: change US to Micros. Be consistent.
 
 #include "MIDIUSB.h" // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h> // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
@@ -208,7 +207,7 @@ void drawUIPlayState() {
 
 void initializeTimer() {
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
-  float intervalMicros = bpmToIntervalUS(DEFAULT_BPM);
+  float intervalMicros = bpmToIntervalMicros(DEFAULT_BPM);
   unsigned long ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000);
   CONFIGURE_TIMER1(
     TCCR1A = 0; // Control Register A
@@ -259,13 +258,13 @@ ISR(TIMER1_COMPA_vect) {
 // configure the timer with 24 ppq intervalMicros based on BPM receivd from Mixxx
 void onSyncComplete() {
   if (currentClockStatus == clockStatus::syncing_complete) {
-    configureTimer(bpmToIntervalUS(mixxxBPM));
+    configureTimer(bpmToIntervalMicros(mixxxBPM));
     currentClockStatus = clockStatus::synced_to_mixxx;
     updateUI = true;
   }
 }
 
-float bpmToIntervalUS(float bpm) {
+float bpmToIntervalMicros(float bpm) {
   return MICROS_PER_MIN / bpm / PPQ;
 }
 
@@ -332,7 +331,7 @@ void readMidiUSB() {
       float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
       if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
         mixxxBPM = newMixxxBPM;
-        float intervalMicros = bpmToIntervalUS(mixxxBPM);
+        float intervalMicros = bpmToIntervalMicros(mixxxBPM);
         configureTimer(intervalMicros);
         /* TODO debounce this */
         updateUI = true;
@@ -487,8 +486,8 @@ void handleJogKnob() {
 // Temporary +/- adjustment to the current timer interval in order to speed up
 // or slow down the midi clock. Used to adjust the phase of the clock.
 void nudgeTempo(float amount) {
-  float currentBPMIntervalUS = bpmToIntervalUS(getBPM());
-  float nudgedInterval = currentBPMIntervalUS * amount;
+  float currentBPMInterval = bpmToIntervalMicros(getBPM());
+  float nudgedInterval = currentBPMInterval * amount;
   configureTimer(nudgedInterval);
   tempoNudgedAtClockPulse = currentClockPulse;
   tempoNudged = true;
@@ -498,7 +497,7 @@ void nudgeTempo(float amount) {
 // based on the current BPM.
 void handleResumeFromTempoNudged() {
   if (resumeFromTempoNudge) {
-    configureTimer(bpmToIntervalUS(getBPM()));
+    configureTimer(bpmToIntervalMicros(getBPM()));
     tempoNudged = false;
     resumeFromTempoNudge = false;
   }
