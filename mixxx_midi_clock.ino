@@ -510,10 +510,15 @@ float getBPM() {
   return DEFAULT_BPM;
 }
 
+int bpmLEDPulseTime = 1;
 void handleBPMLED() {
-  if (currentClockPulse == 24) {
-    digitalWrite(LED_BUILTIN, HIGH);
-  } else if (currentClockPulse == 6) {
+  if (barPosition == 96) {
+    bpmLEDPulseTime = 8;
     digitalWrite(LED_BUILTIN, LOW);
+  } else if (currentClockPulse == 24) {
+    bpmLEDPulseTime = 1;
+    digitalWrite(LED_BUILTIN, LOW);
+  } else if (!(currentClockPulse % bpmLEDPulseTime)) {
+    digitalWrite(LED_BUILTIN, HIGH);
   }
 }
