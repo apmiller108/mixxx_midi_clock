@@ -28,9 +28,9 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #define debugln(x)
 #endif
 
-#define CONFIGURE_TIMER1(X) cli(); X; sei();
+#define CONFIGURE_TIMER1(X) noInterrupts(); X; interrupts();
 
-const unsigned long CPU_FREQ = 16000000; // 16 MHz clock speed
+const unsigned long CPU_FREQ = 16000000;
 const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
 
