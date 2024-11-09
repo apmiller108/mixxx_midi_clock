@@ -84,7 +84,9 @@ int volatile tempoNudgedAtClockPulse = 0;
 int volatile resumeFromTempoNudge = false;
 
 DisplaySSD1306_128x64_I2C display(-1); // -1 means default I2C address (0x3C)
-bool updateUI = true;
+bool updateUIClockStatus = true;
+bool updateUIPlayStatus = true;
+bool updateUIBPM = true;
 unsigned long lastDrawUIDebounceTimeMs = 0;
 
 midiEventPacket_t rx;
@@ -97,8 +99,8 @@ void setup() {
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
   display.setColor(1);
-  display.printFixedN(0,  0, "Mixxx", STYLE_NORMAL, FONT_SIZE_2X);
-  display.printFixedN(0,  16, "MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(34,  0, "Mixxx", STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(8,  16, "MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
 
   delay(2000);
 
@@ -135,78 +137,6 @@ void loop() {
   drawUI();
 }
 
-void drawUI() {
-  if (updateUI && ((millis() - lastDrawUIDebounceTimeMs) > debounceDelayMs)) {
-    /* display.clear(); */
-    drawUIClockStatus();
-
-    drawUIPlayState();
-    drawUIBPM();
-
-    updateUI = false;
-    lastDrawUIDebounceTimeMs = millis();
-  }
-}
-
-void drawUIClockStatus() {
-  char* clockStatus;
-  switch (currentClockStatus) {
-  case clockStatus::free:
-    clockStatus = "Free";
-    break;
-  case clockStatus::syncing:
-    clockStatus = "Syncing";
-    break;
-  case clockStatus::syncing_complete:
-    clockStatus = "Syncing";
-    break;
-  case clockStatus::synced_to_mixxx:
-    clockStatus = "Synced";
-    break;
-  default:
-    clockStatus = "";
-    break;
-  }
-  display.setColor(0);
-  display.fillRect(0, 0, 36, 16);
-  display.setColor(1);
-  display.printFixedN(0, 0, clockStatus, STYLE_NORMAL, FONT_SIZE_2X);
-}
-
-void drawUIBPM() {
-  char bpmString[7];
-  dtostrf(getBPM(), 6, 2, bpmString);
-  display.printFixedN(26, 24, bpmString, STYLE_NORMAL, FONT_SIZE_2X);
-}
-
-void drawUIPlayState() {
-  char* icon;
-  switch (currentPlayState) {
-  case playState::started:
-    icon = "▷";
-    break;
-  case playState::playing:
-    icon = "▶";
-    break;
-  case playState::paused:
-    icon = "||";
-    break;
-  case playState::unpaused:
-    icon = "▷";
-    break;
-  case playState::stopped:
-    icon = "[]";
-    break;
-  default:
-    icon = "";
-    break;
-  }
-  display.setColor(0);
-  display.fillRect(100, 0, 12, 16);
-  display.setColor(1);
-  display.printFixedN(100, 0, icon, STYLE_NORMAL, FONT_SIZE_2X);
-}
-
 void initializeTimer() {
   // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
   float intervalMicros = bpmToIntervalMicros(DEFAULT_BPM);
@@ -234,6 +164,7 @@ ISR(TIMER1_COMPA_vect) {
   // Syncing that means the timer has been configured for Mixxx's next beat.
   if (currentClockStatus == clockStatus::syncing) {
     currentClockStatus = clockStatus::syncing_complete;
+    updateUIClockStatus = true;
   }
 
   // Keep track of the pulse count (PPQ) in range of 1..24
@@ -262,7 +193,7 @@ void onSyncComplete() {
   if (currentClockStatus == clockStatus::syncing_complete) {
     configureTimer(bpmToIntervalMicros(mixxxBPM));
     currentClockStatus = clockStatus::synced_to_mixxx;
-    updateUI = true;
+    updateUIClockStatus = true;
   }
 }
 
@@ -335,7 +266,7 @@ void readMidiUSB() {
         mixxxBPM = newMixxxBPM;
         float intervalMicros = bpmToIntervalMicros(mixxxBPM);
         configureTimer(intervalMicros);
-        updateUI = true;
+        updateUIBPM = true;
       }
 
       if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
@@ -414,7 +345,7 @@ void handlePlayButton() {
       break;
     }
     lastBtnDebounceTimeMs = millis();
-    updateUI = true;
+    updateUIPlayStatus = true;
   }
   previousPlayButtonState = playButtonState;
 }
@@ -424,7 +355,7 @@ void handleContinue() {
   if (currentPlayState == playState::unpaused && pausePosition == barPosition) {
     sendMidiTransportMessage(MIDI_CONT);
     currentPlayState = playState::playing;
-    updateUI = true;
+    updateUIClockStatus = true;
   }
 }
 
@@ -433,7 +364,7 @@ void handleStart() {
   if (currentPlayState == playState::started && barPosition == 96) {
     sendMidiTransportMessage(MIDI_START);
     currentPlayState = playState::playing;
-    updateUI = true;
+    updateUIPlayStatus = true;
   }
 }
 
@@ -444,7 +375,7 @@ void handleStopButton() {
     currentPlayState = playState::stopped;
     shouldContinue = false;
     lastBtnDebounceTimeMs = millis();
-    updateUI = true;
+    updateUIPlayStatus = true;
   }
   previousStopButtonState = stopButtonState;
 }
@@ -510,11 +441,86 @@ int bpmLEDPulseTime = 1;
 void handleBPMLED() {
   if (barPosition == 96) {
     bpmLEDPulseTime = 8;
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(LED_BUILTIN, HIGH);
   } else if (currentClockPulse == 24) {
     bpmLEDPulseTime = 1;
-    digitalWrite(LED_BUILTIN, LOW);
-  } else if (!(currentClockPulse % bpmLEDPulseTime)) {
     digitalWrite(LED_BUILTIN, HIGH);
+  } else if (!(currentClockPulse % bpmLEDPulseTime)) {
+    digitalWrite(LED_BUILTIN, LOW);
   }
+}
+
+void drawUI() {
+  if (updateUI && ((millis() - lastDrawUIDebounceTimeMs) > debounceDelayMs)) {
+    if (updateUIClockStatus) {
+      drawUIClockStatus();
+      updateUIClockStatus = false;
+    }
+    if (updateUIPlayStatus) {
+      drawUIPlayState();
+      updateUIPlayStatus = false;
+    }
+    if (updateUIBPM) {
+      drawUIBPM();
+      updateUIBPM = false;
+    }
+    lastDrawUIDebounceTimeMs = millis();
+  }
+}
+
+bool updateUI() {
+  return updateUIClockStatus || updateUIPlayStatus || updateUIBPM;
+}
+
+void drawUIClockStatus() {
+  char* clockStatus;
+  switch (currentClockStatus) {
+  case clockStatus::free:
+    clockStatus = "Free   ";
+    break;
+  case clockStatus::syncing:
+    clockStatus = "Syncing";
+    break;
+  case clockStatus::syncing_complete:
+    clockStatus = "Syncing";
+    break;
+  case clockStatus::synced_to_mixxx:
+    clockStatus = "Synced ";
+    break;
+  default:
+    clockStatus = "       ";
+    break;
+  }
+  display.printFixedN(0, 0, clockStatus, STYLE_NORMAL, FONT_SIZE_2X);
+}
+
+void drawUIBPM() {
+  char bpmString[7];
+  dtostrf(getBPM(), 6, 2, bpmString);
+  display.printFixedN(26, 24, bpmString, STYLE_NORMAL, FONT_SIZE_2X);
+}
+
+void drawUIPlayState() {
+  char* icon;
+  switch (currentPlayState) {
+  case playState::started:
+    icon = ">|";
+    break;
+  case playState::playing:
+    icon = "|>";
+    break;
+  case playState::paused:
+    icon = "||";
+    break;
+  case playState::unpaused:
+    icon = ">|";
+    break;
+  case playState::stopped:
+    icon = "[]";
+    break;
+  default:
+    icon = "";
+    break;
+  }
+  display.printFixedN(100, 0, icon, STYLE_NORMAL, FONT_SIZE_2X);
 }
