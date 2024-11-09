@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MixxxMIDIPreset mixxxVersion="2.0.0+" schemaVersion="1">
+  <info>
+    <name>Mixxx MIDI Clock</name>
+    <author>Alex P. Miller</author>
+    <description>Mixxx MIDI clock controller</description>
+    <documentation>https://github.com/apmiller108/mixxx_midi_clock</documentation>
+  </info>
+  <controller id="mixxx_midi_clock Control">
+    <scriptfiles>
+      <file filename="mixxx_midi_clock-scripts.js" functionprefix="mixxxMIDIClock"/>
+    </scriptfiles>
+    <controls></controls>
+    <outputs></outputs>
+  </controller>
+</MixxxMIDIPreset>
