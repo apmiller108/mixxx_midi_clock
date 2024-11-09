@@ -22,6 +22,7 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 USBMIDI_NAMESPACE::usbMidiTransport usbMIDI2();
 MIDI_NAMESPACE::MidiInterface<USBMIDI_NAMESPACE::usbMidiTransport> MIDI2((USBMIDI_NAMESPACE::usbMidiTransport&)usbMIDI2);
 
+
 #define DEBUG 0
 
 #if DEBUG == 1
@@ -105,6 +106,7 @@ void setup() {
   display.clear();
 
   MIDI.begin(MIDI_CHANNEL_OMNI);
+  MIDI.setHandleNoteOn(onNoteOn);
 
   initializeTimer();
 
@@ -120,7 +122,7 @@ void setup() {
 void loop() {
   onSyncComplete();
 
-  usbMIDI2.read();
+  MIDI2.read();
 
   handlePlayButton();
   handleStopButton();
@@ -250,7 +252,7 @@ void onNoteOn(byte channel, byte note, byte velocity) {
   float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
   if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
     mixxxBPM = newMixxxBPM;
-    float intervalMicros = bpmToIntervalUS(mixxxBPM);
+    float intervalMicros = bpmToIntervalMicros(mixxxBPM);
     configureTimer(intervalMicros);
     updateUIBPM = true;
   }
@@ -284,12 +286,12 @@ void onNoteOn(byte channel, byte note, byte velocity) {
 
 void sendMidiClock() {
   MIDI.sendRealTime(midi::Clock);
-  usbMIDI2.sendRealTime(midi::Clock);
+  MIDI2.sendRealTime(midi::Clock);
 }
 
 void sendMidiTransportMessage(byte message) {
   MIDI.sendRealTime(message);
-  usbMIDI2.sendRealTime(message);
+  MIDI2.sendRealTime(message);
 }
 
 boolean playButtonRising() {
@@ -351,7 +353,7 @@ void handleStart() {
 void handleStopButton() {
   stopButtonState = digitalRead(STOP_BUTTON);
   if (stopButtonRising() && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
-    sendMidiTransportMessage(MIDI_STOP);
+    sendMidiTransportMessage(midi::Stop);
     currentPlayState = playState::stopped;
     shouldContinue = false;
     lastBtnDebounceTimeMs = millis();
