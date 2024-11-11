@@ -1,2 +1,6 @@
-# mixxx_midi_clock
-Midi clock generator for Mixxx DJ
+# Mixxx MIDI Clock
+Ardunio based midi clock generator for [Mixxx](https://mixxx.org/)
+
+## How does it work?
+## Features
+## Getting Started
