@@ -1,7 +1,6 @@
 /*
  * mixxx_midi_clock.ino
  *
- * Created: 10/17/2024
  * Author: alex miller
  * https://github.com/apmiller108/mixxx_midi_clock
  *
@@ -11,6 +10,8 @@
 // even possible? Maybe assume the first message comes on beat one active. But the
 // first complete quarter note will be for beat 2. Actually, seems to think beat
 // 1 is mixxx's beat 4.
+// TODO feature: add switch to keep clock in free mode
+// TODO feature: add pot to adjust bpm when in free clock mode
 
 #include "MIDIUSB.h" // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h> // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
@@ -73,7 +74,6 @@ int playButtonState;
 int stopButtonState;
 int previousPlayButtonState = LOW;
 int previousStopButtonState = LOW;
-bool shouldContinue = false;
 
 unsigned long lastBtnDebounceTimeMs = 0;
 int debounceDelayMs = 200;
@@ -92,9 +92,6 @@ unsigned long lastDrawUIDebounceTimeMs = 0;
 midiEventPacket_t rx;
 
 void setup() {
-  /* Serial.begin(31250); */
-  /* while(!Serial) { */
-
   display.begin();
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
@@ -127,13 +124,13 @@ void loop() {
   handlePlayButton();
   handleStopButton();
 
-  handleContinue();
-  handleStart();
+  onContinue();
+  onStart();
 
   handleJogKnob();
-  handleResumeFromTempoNudged();
+  onResumeFromTempoNudge();
 
-  handleBPMLED();
+  pulseBPMLED();
   drawUI();
 }
 
@@ -251,26 +248,29 @@ void readMidiUSB() {
       debug("-");
       debugln(rx.byte3);
 
-      if (rx.byte2 == 0x34) {
-        // The Mixxx controller script subtracts 60 from the BPM so it fits in a
-        // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
-        mixxxBPMWhole = rx.byte3 + 60;
-      }
+      switch (rx.byte1 & 0xF0) {
+      case 0x90:
+        // Note On
+        if (rx.byte2 == 0x34) {
+          // The Mixxx controller script subtracts 60 from the BPM so it fits in a
+          // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
+          // Supported BPM range: 60 - 187
+          mixxxBPMWhole = rx.byte3 + 60;
+        }
 
-      if (rx.byte2 == 0x35) {
-        mixxxBPMFractional = rx.byte3 / 100.0;
-      }
+        if (rx.byte2 == 0x35) {
+          mixxxBPMFractional = rx.byte3 / 100.0;
+        }
 
-      float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
-      if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
-        mixxxBPM = newMixxxBPM;
-        float intervalMicros = bpmToIntervalMicros(mixxxBPM);
-        configureTimer(intervalMicros);
-        updateUIBPM = true;
-      }
+        float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
+        if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
+          mixxxBPM = newMixxxBPM;
+          float intervalMicros = bpmToIntervalMicros(mixxxBPM);
+          configureTimer(intervalMicros);
+          updateUIBPM = true;
+        }
 
-      if (rx.byte2 == 0x32 && (rx.byte1 & 0xF0) == 0x90) {
-        if (!receivingMidi) {
+        if (rx.byte2 == 0x32 && !receivingMidi) {
           // Start next pulse when the next beat is predicted to happen
           // This should only be needed once.
 
@@ -281,8 +281,8 @@ void readMidiUSB() {
           float beatDistance = 1 - (rx.byte3 / 127.0);
           float beatLength =  MICROS_PER_MIN / mixxxBPM;
 
-          // Next tick starts in the in micro seconds to the next beat.
-          // This assumes getting this message on beat_active for the first beat
+          // Next tick starts in the number of micro seconds to the next beat.
+          // This assumes getting this message on first beat
           // in a measure. Maybe corrections can be made as needed by adjusting
           // the phase.
           float startIn = (beatLength * beatDistance);
@@ -293,6 +293,15 @@ void readMidiUSB() {
 
           receivingMidi = true;
         }
+        break;
+      case 0x80:
+        // Note off
+        if (rx.byte2 == 0x32) {
+          receivingMidi = false;
+          currentClockStatus = clockStatus::free;
+        }
+      default:
+        break;
       }
     }
   } while (rx.header != 0);
@@ -351,7 +360,7 @@ void handlePlayButton() {
 }
 
 // Resume playing at the same position in the bar when paused.
-void handleContinue() {
+void onContinue() {
   if (currentPlayState == playState::unpaused && pausePosition == barPosition) {
     sendMidiTransportMessage(MIDI_CONT);
     currentPlayState = playState::playing;
@@ -360,7 +369,7 @@ void handleContinue() {
 }
 
 // Always start on beat 1
-void handleStart() {
+void onStart() {
   if (currentPlayState == playState::started && barPosition == 96) {
     sendMidiTransportMessage(MIDI_START);
     currentPlayState = playState::playing;
@@ -373,7 +382,6 @@ void handleStopButton() {
   if (stopButtonRising() && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
     sendMidiTransportMessage(MIDI_STOP);
     currentPlayState = playState::stopped;
-    shouldContinue = false;
     lastBtnDebounceTimeMs = millis();
     updateUIPlayStatus = true;
   }
@@ -422,7 +430,7 @@ void nudgeTempo(float amount) {
 
 // Re-configures the timer after a tempo nudge back to the original interval
 // based on the current BPM.
-void handleResumeFromTempoNudged() {
+void onResumeFromTempoNudge() {
   if (resumeFromTempoNudge) {
     configureTimer(bpmToIntervalMicros(getBPM()));
     tempoNudged = false;
@@ -438,7 +446,7 @@ float getBPM() {
 }
 
 int bpmLEDPulseTime = 1;
-void handleBPMLED() {
+void pulseBPMLED() {
   if (barPosition == 96) {
     bpmLEDPulseTime = 8;
     digitalWrite(LED_BUILTIN, HIGH);
