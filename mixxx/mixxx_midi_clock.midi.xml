@@ -8,7 +8,7 @@
   </info>
   <controller id="mixxx_midi_clock Control">
     <scriptfiles>
-      <file filename="mixxx_midi_clock-scripts.js" functionprefix="mixxxMIDIClock"/>
+      <file filename="mixxx_midi_clock-script.js" functionprefix="mixxxMIDIClock"/>
     </scriptfiles>
     <controls></controls>
     <outputs></outputs>
