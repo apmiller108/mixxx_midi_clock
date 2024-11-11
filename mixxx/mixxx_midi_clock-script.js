@@ -10,6 +10,7 @@
  *  clock signal that can sync exteral gear (eg, drum machine, sampler,
  *  sequencer, etc) to the Sync Leader deck in Mixxx
  *
+ *  Compatible with Mixxx v2.4+
  */
 
 const midiChannel = 11;
@@ -19,7 +20,6 @@ class Deck {
     this.group = group;
     this.playLatched = engine.getValue(group, 'play_latched');
     engine.makeConnection(group, 'play_latched', (value) => {
-      // Set to 1 when deck is playing, but not when previewing.
       this.playLatched = value;
     });
   }
@@ -47,6 +47,7 @@ class Deck {
     return this.syncMode() == 1;
   }
 
+  // Set to 1 when deck is playing, but not when previewing.
   isPlaying() {
     return this.playLatched == 1;
   }
@@ -84,7 +85,7 @@ var mixxxMIDIClock = new class MixxxMIDIClock {
     // with BPM and playing deck beat distance over three messages.
     if (syncLeader) {
       let beatDistance;
-      if (syncLeader && syncLeader.isPlaying()) {
+      if (syncLeader.isPlaying()) {
         beatDistance = syncLeader.beatDistance();
       } else if (syncFollower = this.findSyncFollower() && syncFollower.isPlaying()) {
         beatDistance = syncFollower.beatDistance();

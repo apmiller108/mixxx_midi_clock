@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "checkJs": true,
+    "lib": [
+      "ES2016"
+    ]
+  },
+  "include": [
+    "./mixxx_midi_clock-script.js"
+    "C:/Program Files/Mixxx/controllers/common-controller-scripts.js",
+    "C:/Program Files/Mixxx/controllers/common-hid-packet-parser.js",
+    "C:/Program Files/Mixxx/controllers/engine-api.d.ts",
+    "C:/Program Files/Mixxx/controllers/color-mapper-api.d.ts",
+    "C:/Program Files/Mixxx/controllers/console-api.d.ts",
+    "C:/Program Files/Mixxx/controllers/hid-controller-api.d.ts"
+  ]
+}
