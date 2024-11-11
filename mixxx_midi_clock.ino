@@ -252,9 +252,9 @@ void readMidiUSB() {
       debugln(rx.byte3);
 
       if (rx.byte2 == 0x34) {
-        // The Mixxx controller script subtracts 50 from the BPM so it fits in a
-        // 0-127 midi range. So, 50 is added to the value to get the actual BPM.
-        mixxxBPMWhole = rx.byte3 + 50;
+        // The Mixxx controller script subtracts 60 from the BPM so it fits in a
+        // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
+        mixxxBPMWhole = rx.byte3 + 60;
       }
 
       if (rx.byte2 == 0x35) {
