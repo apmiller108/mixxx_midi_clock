@@ -14,17 +14,20 @@
  */
 
 const midiChannel = 11;
+const messageInterval = 375; // Frequency in MS to send the midi messages
 
 class Deck {
   constructor(group) {
     this.group = group;
+
+    // Set to 1 when deck is playing, but not when previewing.
     this.playLatched = engine.getValue(group, 'play_latched');
     engine.makeConnection(group, 'play_latched', (value) => {
       this.playLatched = value;
     });
   }
 
-  // A float, precision beyond 2 decimal places.
+  // Returns a float. The real value BPM of the deck including rate adjustment.
   bpm() {
     return engine.getValue(this.group, "bpm");
   }
@@ -47,7 +50,6 @@ class Deck {
     return this.syncMode() == 1;
   }
 
-  // Set to 1 when deck is playing, but not when previewing.
   isPlaying() {
     return this.playLatched == 1;
   }
@@ -65,7 +67,7 @@ var mixxxMIDIClock = new class MixxxMIDIClock {
   }
 
   init() {
-    this.timer = engine.beginTimer(375, this.sendMessage.bind(this));
+    this.timer = engine.beginTimer(messageInterval, this.sendMessage.bind(this));
   }
 
   sendMessage() {
