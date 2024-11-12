@@ -24,7 +24,7 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
-#define debugln(x) Seriali.println(x)
+#define debugln(x) Serial.println(x)
 #else
 #define debug(x)
 #define debugln(x)
@@ -92,12 +92,13 @@ unsigned long lastDrawUIDebounceTimeMs = 0;
 midiEventPacket_t rx;
 
 void setup() {
+  /* Serial.begin(31250); */
   display.begin();
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
   display.setColor(1);
   display.printFixedN(34,  0, "Mixxx", STYLE_NORMAL, FONT_SIZE_2X);
-  display.printFixedN(8,  16, "MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(5,  16, "MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
 
   delay(2000);
 
@@ -249,59 +250,64 @@ void readMidiUSB() {
       debugln(rx.byte3);
 
       switch (rx.byte1 & 0xF0) {
-      case 0x90:
-        // Note On
-        if (rx.byte2 == 0x34) {
-          // The Mixxx controller script subtracts 60 from the BPM so it fits in a
-          // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
-          // Supported BPM range: 60 - 187
-          mixxxBPMWhole = rx.byte3 + 60;
+      case 0x90: {
+          // Note On
+          if (rx.byte2 == 0x34) {
+            // The Mixxx controller script subtracts 60 from the BPM so it fits in a
+            // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
+            // Supported BPM range: 60 - 187
+            mixxxBPMWhole = rx.byte3 + 60;
+          }
+
+          if (rx.byte2 == 0x35) {
+            mixxxBPMFractional = rx.byte3 / 100.0;
+          }
+
+          float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
+          if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
+            mixxxBPM = newMixxxBPM;
+            float intervalMicros = bpmToIntervalMicros(mixxxBPM);
+            configureTimer(intervalMicros);
+            updateUIBPM = true;
+          }
+
+          if (rx.byte2 == 0x32 && !receivingMidi) {
+            // Start next pulse when the next beat is predicted to happen
+            // This should only be needed once.
+
+            // beat_distance value from Mixxx is a number between 0 and 1. It
+            // represents the distance from the previous beat marker. It is
+            // multiplied by 127 in order to pass it as a midi value, so it is
+            // divided here in order to get the original float value.
+            float beatDistance = 1 - (rx.byte3 / 127.0);
+            float beatLength =  MICROS_PER_MIN / mixxxBPM;
+
+            // Next tick starts in the number of micro seconds to the next beat.
+            // This assumes getting this message on first beat
+            // in a measure. Maybe corrections can be made as needed by adjusting
+            // the phase.
+            float startIn = (beatLength * beatDistance);
+            configureTimer(startIn);
+            currentClockStatus = clockStatus::syncing;
+            currentClockPulse = 1;
+            barPosition = 1;
+
+            receivingMidi = true;
+          }
+          break;
         }
-
-        if (rx.byte2 == 0x35) {
-          mixxxBPMFractional = rx.byte3 / 100.0;
+      case 0x80: {
+          // Note off
+          if (rx.byte2 == 0x32) {
+            receivingMidi = false;
+            currentClockStatus = clockStatus::free;
+            updateUIClockStatus = true;
+          }
+          break;
         }
-
-        float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
-        if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
-          mixxxBPM = newMixxxBPM;
-          float intervalMicros = bpmToIntervalMicros(mixxxBPM);
-          configureTimer(intervalMicros);
-          updateUIBPM = true;
+      default: {
+          break;
         }
-
-        if (rx.byte2 == 0x32 && !receivingMidi) {
-          // Start next pulse when the next beat is predicted to happen
-          // This should only be needed once.
-
-          // beat_distance value from Mixxx is a number between 0 and 1. It
-          // represents the distance from the previous beat marker. It is
-          // multiplied by 127 in order to pass it as a midi value, so it is
-          // divided here in order to get the original float value.
-          float beatDistance = 1 - (rx.byte3 / 127.0);
-          float beatLength =  MICROS_PER_MIN / mixxxBPM;
-
-          // Next tick starts in the number of micro seconds to the next beat.
-          // This assumes getting this message on first beat
-          // in a measure. Maybe corrections can be made as needed by adjusting
-          // the phase.
-          float startIn = (beatLength * beatDistance);
-          configureTimer(startIn);
-          currentClockStatus = clockStatus::syncing;
-          currentClockPulse = 1;
-          barPosition = 1;
-
-          receivingMidi = true;
-        }
-        break;
-      case 0x80:
-        // Note off
-        if (rx.byte2 == 0x32) {
-          receivingMidi = false;
-          currentClockStatus = clockStatus::free;
-        }
-      default:
-        break;
       }
     }
   } while (rx.header != 0);
@@ -364,7 +370,7 @@ void onContinue() {
   if (currentPlayState == playState::unpaused && pausePosition == barPosition) {
     sendMidiTransportMessage(MIDI_CONT);
     currentPlayState = playState::playing;
-    updateUIClockStatus = true;
+    updateUIPlayStatus = true;
   }
 }
 

@@ -95,7 +95,7 @@ var mixxxMIDIClock = new class MixxxMIDIClock {
         beatDistance = anyPlayingDeck.beatDistance();
       }
       if (beatDistance != undefined) {
-        const bpmParts = syncLeader.bpm().toFixed(2).toString().split('.').map(v => parseInt(v));
+        const bpmParts = syncLeader.bpm().toFixed(2).split('.').map(v => parseInt(v));
         // supports BPM in the range of 60..187
         const bpmWhole = Math.max(0, Math.min(127, bpmParts[0] - 60));
         const bpmFractional = bpmParts[1];
