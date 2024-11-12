@@ -255,18 +255,14 @@ void readMidiUSB() {
       debugln(rx.byte3);
 
       switch (rx.byte1 & 0xF0) {
-      case 0x90: {
-          // Note On
-          if (rx.byte2 == 0x34) {
-            // The Mixxx controller script subtracts 60 from the BPM so it fits in a
-            // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
-            // Supported BPM range: 60 - 187
-            mixxxBPMWhole = rx.byte3 + 60;
-          }
+      case 0xE0: {
+          // Pitch bend carries the bpm data
 
-          if (rx.byte2 == 0x35) {
-            mixxxBPMFractional = rx.byte3 / 100.0;
-          }
+          // The Mixxx controller script subtracts 60 from the BPM so it fits in a
+          // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
+          // Supported BPM range: 60 - 187
+          mixxxBPMWhole = rx.byte2 + 60;
+          mixxxBPMFractional = rx.byte3 / 100.0;
 
           float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
           if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
@@ -275,8 +271,9 @@ void readMidiUSB() {
             configureTimer(intervalMicros);
             updateUIBPM = true;
           }
-
-          if (rx.byte2 == 0x32 && !receivingMidi) {
+        case 0x90: {
+          // Note On for note B8 carries the beat_distance
+          if (rx.byte2 == 0x77 && !receivingMidi) {
             // beat_distance value from Mixxx is a number between 0 and 1. It
             // represents the distance from the previous beat marker. It is
             // multiplied by 127 in order to pass it as a midi value, so it is
@@ -302,8 +299,8 @@ void readMidiUSB() {
           break;
         }
       case 0x80: {
-          // Note off
-          if (rx.byte2 == 0x32) {
+          // Note Off for note B8 indicates nothing is playing from Mixxx and there is no sync leader
+          if (rx.byte2 == 0x77) {
             receivingMidi = false;
             currentClockStatus = clockStatus::free;
             updateUIClockStatus = true;

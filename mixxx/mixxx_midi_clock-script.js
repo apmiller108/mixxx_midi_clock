@@ -73,6 +73,7 @@ var mixxxMIDIClock = new class MixxxMIDIClock {
 
   sendMessage() {
     const syncLeader = this.findSyncLeader();
+    const channel = midiChannel - 1;
     let syncFollower;
     let anyPlayingDeck;
 
@@ -103,12 +104,10 @@ var mixxxMIDIClock = new class MixxxMIDIClock {
         const bpmWhole = Math.max(0, Math.min(127, bpmParts[0] - 60));
         const bpmFractional = bpmParts[1];
 
-        // Note E (52) On
-        midi.sendShortMsg(0x8F + midiChannel, 0x34, bpmWhole);
-        // note F (53) On
-        midi.sendShortMsg(0x8F + midiChannel, 0x35, bpmFractional);
-        // Note D (50) On
-        midi.sendShortMsg(0x8F + midiChannel, 0x32, Math.round(beatDistance * 127));
+        // Pitch bend used send the bpm data in the MSB and LSB
+        midi.sendShortMsg(0xE0 + channel, bpmWhole, bpmFractional);
+        // On with note B8 (118)
+        midi.sendShortMsg(0x90 + channel, 0x77, Math.round(beatDistance * 127));
       } else {
         this.sendOffMessage();
       }
@@ -126,8 +125,8 @@ var mixxxMIDIClock = new class MixxxMIDIClock {
   }
 
   sendOffMessage() {
-    // Note D (50) Off message with value 0
-    midi.sendShortMsg(0x7F + midiChannel, 0x32, 0x0);
+    // Off with note B8 (118) and value of 0
+    midi.sendShortMsg(0x80 + channel, 0x77, 0x0);
   }
 
   shutdown() {
