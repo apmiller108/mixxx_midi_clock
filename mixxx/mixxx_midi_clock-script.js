@@ -15,6 +15,7 @@
 
 const midiChannel = 11;
 const messageInterval = 375; // Frequency in MS to send the midi messages
+const debug = false;
 
 class Deck {
   constructor(group) {
@@ -75,13 +76,15 @@ var mixxxMIDIClock = new class MixxxMIDIClock {
     let syncFollower;
     let anyPlayingDeck;
 
-    this.decks.forEach((d) => {
-      console.log(d.group);
-      console.log(d.syncMode());
-      console.log(d.bpm());
-      console.log(d.isPlaying());
-      console.log(d.beatDistance());
-    });
+    if (debug) {
+      this.decks.forEach((d) => {
+        console.log(d.group);
+        console.log(d.syncMode());
+        console.log(d.bpm());
+        console.log(d.isPlaying());
+        console.log(d.beatDistance());
+      });
+    }
 
     // If there is a sync leader and at least one deck is playing send Midi data
     // with BPM and playing deck beat distance over three messages.
