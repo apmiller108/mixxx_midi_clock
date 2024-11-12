@@ -14,7 +14,7 @@
  */
 
 const midiChannel = 11;
-const messageInterval = 375; // Frequency in MS to send the midi messages
+const messageInterval = 320; // Frequency in MS to send the midi messages
 const debug = false;
 
 class Deck {
