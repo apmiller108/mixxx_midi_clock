@@ -45,8 +45,8 @@ const byte MIDI_CLOCK = 0xF8;
 
 enum class clockStatus {
   free,
-  syncing,
-  syncing_complete,
+  /* syncing, */
+  /* syncing_complete, */
   synced_to_mixxx
 };
 volatile enum clockStatus currentClockStatus = clockStatus::free;
@@ -118,7 +118,7 @@ void setup() {
 }
 
 void loop() {
-  onSyncComplete();
+  /* onSyncComplete(); */
 
   readMidiUSB();
 
@@ -159,11 +159,16 @@ void initializeTimer() {
 ISR(TIMER1_COMPA_vect) {
   sendMidiClock();
 
-  // Syncing that means the timer has been configured for Mixxx's next beat.
-  if (currentClockStatus == clockStatus::syncing) {
-    currentClockStatus = clockStatus::syncing_complete;
-    updateUIClockStatus = true;
-  }
+  // `syncing` that means the timer has just been configured by MIDI messages
+  // received from Mixxx. This block therefore should only called on the first
+  // timer interrupt function call, at which point that clock status is set to
+  // `syncing_complete`. Then in the next loop function, the timer is set to the
+  // complete PPQ interval. The initial interval will be a partial interval
+  // based on the beat_distance.
+  /* if (currentClockStatus == clockStatus::syncing) { */
+  /*   currentClockStatus = clockStatus::syncing_complete; */
+  /*   updateUIClockStatus = true; */
+  /* } */
 
   // Keep track of the pulse count (PPQ) in range of 1..24
   currentClockPulse = (currentClockPulse % PPQ) + 1;
@@ -187,13 +192,13 @@ ISR(TIMER1_COMPA_vect) {
 }
 
 // configure the timer with 24 ppq intervalMicros based on BPM receivd from Mixxx
-void onSyncComplete() {
-  if (currentClockStatus == clockStatus::syncing_complete) {
-    configureTimer(bpmToIntervalMicros(mixxxBPM));
-    currentClockStatus = clockStatus::synced_to_mixxx;
-    updateUIClockStatus = true;
-  }
-}
+/* void onSyncComplete() { */
+/*   if (currentClockStatus == clockStatus::syncing_complete) { */
+/*     configureTimer(bpmToIntervalMicros(mixxxBPM)); */
+/*     currentClockStatus = clockStatus::synced_to_mixxx; */
+/*     updateUIClockStatus = true; */
+/*   } */
+/* } */
 
 float bpmToIntervalMicros(float bpm) {
   return MICROS_PER_MIN / bpm / PPQ;
@@ -272,27 +277,27 @@ void readMidiUSB() {
           }
 
           if (rx.byte2 == 0x32 && !receivingMidi) {
-            // Start next pulse when the next beat is predicted to happen
-            // This should only be needed once.
-
             // beat_distance value from Mixxx is a number between 0 and 1. It
             // represents the distance from the previous beat marker. It is
             // multiplied by 127 in order to pass it as a midi value, so it is
             // divided here in order to get the original float value.
-            float beatDistance = 1 - (rx.byte3 / 127.0);
-            float beatLength =  MICROS_PER_MIN / mixxxBPM;
 
-            // Next tick starts in the number of micro seconds to the next beat.
-            // This assumes getting this message on first beat
-            // in a measure. Maybe corrections can be made as needed by adjusting
-            // the phase.
-            float startIn = (beatLength * beatDistance);
-            configureTimer(startIn);
-            currentClockStatus = clockStatus::syncing;
-            currentClockPulse = 1;
-            barPosition = 1;
+            // This assumes getting this message between beats 1 and 2 in a 4/4
+            // measure and tries the guess which clock pulse it should start on
+            // in order to match the squencer position with the track playing in
+            // Mixxx.
+            float beatDistance = rx.byte3 / 127.0;
+            float intervalMicros = bpmToIntervalMicros(mixxxBPM);
 
+            CONFIGURE_TIMER1 (
+              configureTimer(intervalMicros);
+              TCNT1  = 0; // reset Timer1 counter to 0
+              currentClockStatus = clockStatus::synced_to_mixxx;
+              currentClockPulse = PPQ * beatDistance;
+              barPosition = currentClockPulse;
+            )
             receivingMidi = true;
+            updateUIClockStatus = true;
           }
           break;
         }
@@ -492,12 +497,12 @@ void drawUIClockStatus() {
   case clockStatus::free:
     clockStatus = "Free   ";
     break;
-  case clockStatus::syncing:
-    clockStatus = "Syncing";
-    break;
-  case clockStatus::syncing_complete:
-    clockStatus = "Syncing";
-    break;
+  /* case clockStatus::syncing: */
+  /*   clockStatus = "Syncing"; */
+  /*   break; */
+  /* case clockStatus::syncing_complete: */
+  /*   clockStatus = "Syncing"; */
+  /*   break; */
   case clockStatus::synced_to_mixxx:
     clockStatus = "Synced ";
     break;
