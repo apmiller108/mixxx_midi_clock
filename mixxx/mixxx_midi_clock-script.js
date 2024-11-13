@@ -125,6 +125,7 @@ var mixxxMIDIClock = new class MixxxMIDIClock {
   }
 
   sendOffMessage() {
+    const channel = midiChannel - 1;
     // Off with note B8 (118) and value of 0
     midi.sendShortMsg(0x80 + channel, 0x77, 0x0);
   }
