@@ -6,10 +6,6 @@
  *
  */
 
-// TODO UX: figure out what position to start at when first syncing to mixxx. Is it
-// even possible? Maybe assume the first message comes on beat one active. But the
-// first complete quarter note will be for beat 2. Actually, seems to think beat
-// 1 is mixxx's beat 4.
 // TODO feature: add switch to keep clock in free mode
 // TODO feature: add pot to adjust bpm when in free clock mode
 
@@ -50,7 +46,7 @@ enum class clockStatus {
   synced_to_mixxx
 };
 volatile enum clockStatus currentClockStatus = clockStatus::free;
-volatile int currentClockPulse = 1;
+volatile int currentClockPulse = 1; // Range 1..24 (PPQ).
 volatile int barPosition = 1; // Range 1..96. Represents the position within a 4/4 measure.
 int pausePosition;
 
@@ -175,22 +171,22 @@ ISR(TIMER1_COMPA_vect) {
 
   if (tempoNudged) {
     // Uses modulo arithmetic to determine the clock pulse interval since the
-    // nudge. It is constrainted to (under)overflows within range 1..24. In CPP
-    // the modulo on a negative number is not treated like a positive number
-    // like it is in other languages. In Ruby, for example, `-20 % 24 = 4`,
-    // while in CPP it is `-20`. This means PPQ is added to get rid of the
-    // negative if present, and value is re-modulo-ed. The +/- 1 is because 1
-    // is the minimum value.
+    // nudge. It is constrainted to (under)overflows within range 1..24. The
+    // modulo on a negative number is not treated like a positive number like it
+    // is in other languages. For example, `-20 % 24 = 4`, while here it is
+    // `-20`. This means PPQ is added to get rid of the negative, and value is
+    // re-moduloed. The +/- 1 is because 1 is the minimum value.
     int clockPulsesSinceTempoNudged = ((currentClockPulse - tempoNudgedAtClockPulse - 1) \
                                          % PPQ + PPQ) % PPQ + 1;
 
-    if (clockPulsesSinceTempoNudged >= 6) { // 1/16th note
+    // 1/16th note (6 clock pulses) is the duration of a tempo nudge
+    if (clockPulsesSinceTempoNudged >= 6) {
       resumeFromTempoNudge = true;
     }
   }
 }
 
-// configure the timer with 24 ppq intervalMicros based on BPM receivd from Mixxx
+// Configure the timer with 24 PPQ intervalMicros based on BPM receivd from Mixxx
 void onSyncComplete() {
   if (currentClockStatus == clockStatus::syncing_complete) {
     CONFIGURE_TIMER1(
@@ -285,7 +281,7 @@ void readMidiUSB() {
             // divided here in order to get the original float value.
 
             // This assumes getting this message between beats 1 and 2 in a 4/4
-            // measure and tries the guess when the next beat will start.
+            // measure and tries the guess when beat 2 will start.
             float beatDistance = 1 - (rx.byte3 / 127.0);
             float startAt = ((MICROS_PER_MIN / mixxxBPM) * beatDistance) + 40000;
 
