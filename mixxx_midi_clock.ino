@@ -45,8 +45,8 @@ const byte MIDI_CLOCK = 0xF8;
 
 enum class clockStatus {
   free,
-  /* syncing, */
-  /* syncing_complete, */
+  syncing,
+  syncing_complete,
   synced_to_mixxx
 };
 volatile enum clockStatus currentClockStatus = clockStatus::free;
@@ -118,7 +118,7 @@ void setup() {
 }
 
 void loop() {
-  /* onSyncComplete(); */
+  onSyncComplete();
 
   readMidiUSB();
 
@@ -163,12 +163,11 @@ ISR(TIMER1_COMPA_vect) {
   // received from Mixxx. This block therefore should only called on the first
   // timer interrupt function call, at which point that clock status is set to
   // `syncing_complete`. Then in the next loop function, the timer is set to the
-  // complete PPQ interval. The initial interval will be a partial interval
-  // based on the beat_distance.
-  /* if (currentClockStatus == clockStatus::syncing) { */
-  /*   currentClockStatus = clockStatus::syncing_complete; */
-  /*   updateUIClockStatus = true; */
-  /* } */
+  // PPQ interval.
+  if (currentClockStatus == clockStatus::syncing) {
+    currentClockStatus = clockStatus::syncing_complete;
+    updateUIClockStatus = true;
+  }
 
   // Keep track of the pulse count (PPQ) in range of 1..24
   currentClockPulse = (currentClockPulse % PPQ) + 1;
@@ -192,18 +191,21 @@ ISR(TIMER1_COMPA_vect) {
 }
 
 // configure the timer with 24 ppq intervalMicros based on BPM receivd from Mixxx
-/* void onSyncComplete() { */
-/*   if (currentClockStatus == clockStatus::syncing_complete) { */
-/*     configureTimer(bpmToIntervalMicros(mixxxBPM)); */
-/*     currentClockStatus = clockStatus::synced_to_mixxx; */
-/*     updateUIClockStatus = true; */
-/*   } */
-/* } */
+void onSyncComplete() {
+  if (currentClockStatus == clockStatus::syncing_complete) {
+    CONFIGURE_TIMER1(
+      configureTimer(bpmToIntervalMicros(mixxxBPM));
+      TCNT1  = 0; // reset Timer1 counter to 0
+      currentClockStatus = clockStatus::synced_to_mixxx;
+      updateUIClockStatus = true;
+      updateUIBPM = true;
+    )
+  }
+}
 
 float bpmToIntervalMicros(float bpm) {
   return MICROS_PER_MIN / bpm / PPQ;
 }
-
 
 // Configure prescaler (1, 8, 64, 256, or 1024) based on the required PPQ
 // interval for the given bpm's PPQ interval. Calculate the timer compare
@@ -256,22 +258,25 @@ void readMidiUSB() {
 
       switch (rx.byte1 & 0xF0) {
       case 0xE0: {
-          // Pitch bend carries the bpm data
+            // Pitch bend carries the bpm data
 
-          // The Mixxx controller script subtracts 60 from the BPM so it fits in a
-          // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
-          // Supported BPM range: 60 - 187
-          mixxxBPMWhole = rx.byte2 + 60;
-          mixxxBPMFractional = rx.byte3 / 100.0;
+            // The Mixxx controller script subtracts 60 from the BPM so it fits in a
+            // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
+            // Supported BPM range: 60 - 187
+            mixxxBPMWhole = rx.byte2 + 60;
+            mixxxBPMFractional = rx.byte3 / 100.0;
 
-          float newMixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
-          if (newMixxxBPM != mixxxBPM && currentClockStatus == clockStatus::synced_to_mixxx) {
-            mixxxBPM = newMixxxBPM;
-            float intervalMicros = bpmToIntervalMicros(mixxxBPM);
-            configureTimer(intervalMicros);
-            updateUIBPM = true;
+            float oldMixxxBPM = mixxxBPM;
+            mixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
+            if (mixxxBPM != oldMixxxBPM) {
+              updateUIBPM = true;
+              if (currentClockStatus == clockStatus::synced_to_mixxx) {
+                float intervalMicros = bpmToIntervalMicros(mixxxBPM);
+                configureTimer(intervalMicros);
+              }
+            }
           }
-        case 0x90: {
+      case 0x90: {
           // Note On for note B8 carries the beat_distance
           if (rx.byte2 == 0x77 && !receivingMidi) {
             // beat_distance value from Mixxx is a number between 0 and 1. It
@@ -280,18 +285,16 @@ void readMidiUSB() {
             // divided here in order to get the original float value.
 
             // This assumes getting this message between beats 1 and 2 in a 4/4
-            // measure and tries the guess which clock pulse it should start on
-            // in order to match the squencer position with the track playing in
-            // Mixxx.
-            float beatDistance = rx.byte3 / 127.0;
-            float intervalMicros = bpmToIntervalMicros(mixxxBPM);
+            // measure and tries the guess when the next beat will start.
+            float beatDistance = 1 - (rx.byte3 / 127.0);
+            float startAt = ((MICROS_PER_MIN / mixxxBPM) * beatDistance) + 40000;
 
             CONFIGURE_TIMER1 (
-              configureTimer(intervalMicros);
+              configureTimer(startAt);
               TCNT1  = 0; // reset Timer1 counter to 0
-              currentClockStatus = clockStatus::synced_to_mixxx;
-              currentClockPulse = PPQ * beatDistance;
-              barPosition = currentClockPulse;
+              currentClockStatus = clockStatus::syncing;
+              currentClockPulse = 1;
+              barPosition = PPQ + 1 // beat 2
             )
             receivingMidi = true;
             updateUIClockStatus = true;
@@ -299,7 +302,8 @@ void readMidiUSB() {
           break;
         }
       case 0x80: {
-          // Note Off for note B8 indicates nothing is playing from Mixxx and there is no sync leader
+          // Note Off for note B8 indicates nothing is playing from Mixxx and
+          // there is no sync leader
           if (rx.byte2 == 0x77) {
             receivingMidi = false;
             currentClockStatus = clockStatus::free;
@@ -468,6 +472,10 @@ void pulseBPMLED() {
 
 void drawUI() {
   if (updateUI && ((millis() - lastDrawUIDebounceTimeMs) > debounceDelayMs)) {
+    if (updateUIBPM) {
+      drawUIBPM();
+      updateUIBPM = false;
+    }
     if (updateUIClockStatus) {
       drawUIClockStatus();
       updateUIClockStatus = false;
@@ -475,10 +483,6 @@ void drawUI() {
     if (updateUIPlayStatus) {
       drawUIPlayState();
       updateUIPlayStatus = false;
-    }
-    if (updateUIBPM) {
-      drawUIBPM();
-      updateUIBPM = false;
     }
     lastDrawUIDebounceTimeMs = millis();
   }
@@ -494,12 +498,12 @@ void drawUIClockStatus() {
   case clockStatus::free:
     clockStatus = "Free   ";
     break;
-  /* case clockStatus::syncing: */
-  /*   clockStatus = "Syncing"; */
-  /*   break; */
-  /* case clockStatus::syncing_complete: */
-  /*   clockStatus = "Syncing"; */
-  /*   break; */
+  case clockStatus::syncing:
+    clockStatus = "Syncing";
+    break;
+  case clockStatus::syncing_complete:
+    clockStatus = "Syncing";
+    break;
   case clockStatus::synced_to_mixxx:
     clockStatus = "Synced ";
     break;
