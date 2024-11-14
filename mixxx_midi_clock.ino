@@ -283,7 +283,7 @@ void readMidiUSB() {
             // This assumes getting this message between beats 1 and 2 in a 4/4
             // measure and tries the guess when beat 2 will start.
             float beatDistance = 1 - (rx.byte3 / 127.0);
-            float startAt = ((MICROS_PER_MIN / mixxxBPM) * beatDistance) + 40000;
+            float startAt = ((MICROS_PER_MIN / mixxxBPM) * beatDistance);
 
             CONFIGURE_TIMER1 (
               configureTimer(startAt);
