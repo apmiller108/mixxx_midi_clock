@@ -87,6 +87,11 @@ unsigned long lastDrawUIDebounceTimeMs = 0;
 
 midiEventPacket_t rx;
 
+LED_BEAT_ONE = 13;
+LED_BEAT_TWO = 12;
+LED_BEAT_THREE = 11;
+LED_BEAT_FOUR = 10;
+
 void setup() {
   /* Serial.begin(31250); */
   display.begin();
@@ -104,7 +109,10 @@ void setup() {
 
   initializeTimer();
 
-  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_BEAT_ONE, OUTPUT);
+  pinMode(LED_BEAT_TWO, OUTPUT);
+  pinMode(LED_BEAT_THREE, OUTPUT);
+  pinMode(LED_BEAT_FOUR, OUTPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
 
@@ -462,12 +470,21 @@ int bpmLEDPulseTime = 1;
 void pulseBPMLED() {
   if (barPosition == 96) {
     bpmLEDPulseTime = 8;
-    digitalWrite(LED_BUILTIN, HIGH);
-  } else if (currentClockPulse == 24) {
+    digitalWrite(LED_BEAT_ONE, HIGH);
+  } else if (barPosition == 24) {
     bpmLEDPulseTime = 1;
-    digitalWrite(LED_BUILTIN, HIGH);
+    digitalWrite(LED_BEAT_TWO, HIGH);
+  } else if (barPosition == 48) {
+    bpmLEDPulseTime = 1;
+    digitalWrite(LED_BEAT_THREE, HIGH);
+  } else if (barPosition == 72) {
+    bpmLEDPulseTime = 1;
+    digitalWrite(LED_BEAT_FOUR, HIGH);
   } else if (!(currentClockPulse % bpmLEDPulseTime)) {
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(LED_BEAT_ONE, LOW);
+    digitalWrite(LED_BEAT_TWO, LOW);
+    digitalWrite(LED_BEAT_THREE, LOW);
+    digitalWrite(LED_BEAT_FOUR, LOW);
   }
 }
 
