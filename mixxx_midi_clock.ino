@@ -329,17 +329,22 @@ void sendMidiTransportMessage(byte message) {
   MidiUSB.flush();
 }
 
-boolean playButtonRising() {
-  return previousPlayButtonState == LOW && playButtonState == HIGH;
-}
-
-boolean stopButtonRising() {
-  return previousStopButtonState == LOW && stopButtonState == HIGH;
+boolean buttonRising(int button) {
+  switch (button) {
+  case PLAY_BUTTON: {
+    return previousPlayButtonState == LOW && playButtonState == HIGH;
+  }
+  case STOP_BUTTON: {
+    return previousStopButtonState == LOW && stopButtonState == HIGH;
+  }
+  default:
+    break;
+  }
 }
 
 void handlePlayButton() {
   playButtonState = digitalRead(PLAY_BUTTON);
-  if (playButtonRising() && (millis() - lastBtnDebounceTimeMs) > debounceDelayMs) {
+  if (buttonRising(PLAY_BUTTON) && (millis() - lastBtnDebounceTimeMs) > debounceDelayMs) {
     switch (currentPlayState) {
     case playState::stopped:
       currentPlayState = playState::started; // Will start on beat 1
@@ -387,7 +392,7 @@ void onStart() {
 
 void handleStopButton() {
   stopButtonState = digitalRead(STOP_BUTTON);
-  if (stopButtonRising() && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
+  if (buttonRising(STOP_BUTTON) && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
     sendMidiTransportMessage(MIDI_STOP);
     currentPlayState = playState::stopped;
     lastBtnDebounceTimeMs = millis();
