@@ -29,8 +29,6 @@ const unsigned long CPU_FREQ = 16000000;
 const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
 
-const float freeClockBPM = 122;
-
 const byte MIDI_START = 0xFA;
 const byte MIDI_CONT = 0xFB;
 const byte MIDI_STOP = 0xFC;
@@ -62,6 +60,7 @@ bool receivingMidi = false;
 float mixxxBPM = 0;
 int mixxxBPMWhole;
 float mixxxBPMFractional;
+float freeClockBPM = 122;
 
 const int PLAY_BUTTON = 8;
 const int STOP_BUTTON = 4;
@@ -89,7 +88,7 @@ RotaryEncoder *jogKnob = nullptr;
 bool volatile tempoNudged = false;
 int volatile tempoNudgedAtClockPulse = 0;
 int volatile resumeFromTempoNudge = false;
-const int JOG_KNOB_BUTTOM = 9999;
+const int JOG_KNOB_BUTTON = 5;
 int previousJogKnobButtonState = LOW;
 unsigned long lastJogKnobBtnDebouceTime = 0;
 
@@ -125,7 +124,7 @@ void setup() {
   pinMode(LED_BEAT_FOUR, OUTPUT);
 
   pinMode(CLOCK_MODE_SWITCH, INPUT);
-  pinMode(JOG_KNOB_BUTTOM, INPUT);
+  pinMode(JOG_KNOB_BUTTON, INPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
 
@@ -137,8 +136,8 @@ void setup() {
   }
   lastClockModeButtonPressMs = millis();
 
-  jogKnob = new RotaryEncoder(3, 7, RotaryEncoder::LatchMode::FOUR3);
-  attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE);
+  jogKnob = new RotaryEncoder(9, 7, RotaryEncoder::LatchMode::FOUR3);
+  attachInterrupt(digitalPinToInterrupt(9), checkJogKnobPosition, CHANGE);
   attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE);
 
   delay(2000);
@@ -164,20 +163,6 @@ void loop() {
   drawUI();
 
   handleClockModeButton();
-
-  if (clockStatus == clockStatus::synced_to_mixxx) {
-    int buttonState = digitalRead(JOG_KNOB_BUTTOM);
-    if (buttonRising(JOG_KNOB_BUTTOM, buttonState) && (millis() - lastJogKnobBtnDebouceTime > debounceDelayMs)) {
-      CONFIGURE_TIMER1 (
-        configureTimer(bpmToIntervalMicros(mixxxBPM));
-        TCNT1  = 0;
-        currentClockPulse = 24;
-        barPosition = 96
-      )
-      lastJogKobButtonPressed = millis();
-    }
-   previousJogKnobButtonState = buttonState;
-  }
 }
 
 void initializeTimer() {
@@ -388,7 +373,7 @@ boolean buttonRising(int button, int currentState) {
   case STOP_BUTTON: {
     return previousStopButtonState == LOW && currentState == HIGH;
   }
-  case JOG_KNOB_BUTTOM: {
+  case JOG_KNOB_BUTTON: {
     return previousJogKnobButtonState == LOW && currentState == HIGH;
   }
   default:
@@ -397,7 +382,7 @@ boolean buttonRising(int button, int currentState) {
 }
 
 void handlePlayButton() {
-  inst buttonState = digitalRead(PLAY_BUTTON);
+  int buttonState = digitalRead(PLAY_BUTTON);
   if (buttonRising(PLAY_BUTTON, buttonState) && (millis() - lastBtnDebounceTimeMs) > debounceDelayMs) {
     switch (currentPlayState) {
     case playState::stopped:
@@ -473,17 +458,15 @@ void handleJogKnob() {
   if (position != newPosition) {
     switch (jogKnob->getDirection()) {
     case RotaryEncoder::Direction::CLOCKWISE:
-      if (clockStatus == clockStatus::free && digitalRead(JOG_KNOB_BUTTOM)) {
-        freeClockBPM = Math.min(240, freeClockBPM + 0.1)
-        configureTimer(bpmToIntervalMicros(freeClockBPM));
+      if (currentClockStatus == clockStatus::free && !digitalRead(JOG_KNOB_BUTTON)) {
+        changeTempo(0.1);
       } else {
         nudgeTempo(0.9);
       }
       break;
     case RotaryEncoder::Direction::COUNTERCLOCKWISE:
-      if (clockStatus == clockStatus::free && digitalRead(JOG_KNOB_BUTTOM)) {
-        freeClockBPM = Math.max(60, freeClockBPM - 0.1)
-        configureTimer(bpmToIntervalMicros(freeClockBPM));
+      if (currentClockStatus == clockStatus::free && !digitalRead(JOG_KNOB_BUTTON)) {
+        changeTempo(-0.1);
       } else {
         nudgeTempo(1.1);
       }
@@ -493,6 +476,13 @@ void handleJogKnob() {
       break;
     }
   }
+}
+
+void changeTempo(float amount) {
+  float bpm = freeClockBPM + amount;
+  freeClockBPM = max(60, min(bpm, 200));
+  configureTimer(bpmToIntervalMicros(freeClockBPM));
+  updateUIBPM = true;
 }
 
 // Temporary +/- adjustment to the current timer interval in order to speed up
@@ -633,7 +623,7 @@ void handleClockModeButton() {
       currentClockStatus = clockStatus::free;
       receivingMidi = false;
       if (mixxxBPM) {
-        freeClockBPM = mixxxBPM
+        freeClockBPM = mixxxBPM;
       }
     }
     updateUIClockStatus = true;
