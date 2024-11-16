@@ -39,8 +39,13 @@ const byte MIDI_CONT = 0xFB;
 const byte MIDI_STOP = 0xFC;
 const byte MIDI_CLOCK = 0xF8;
 
+const int CLOCK_MODE_BUTTON = 6;
+int previousClockModeButtonState;
+long lastClockModeButtonPressMs;
+
 enum class clockStatus {
   free,
+  ready,
   syncing,
   syncing_complete,
   synced_to_mixxx
@@ -87,10 +92,10 @@ unsigned long lastDrawUIDebounceTimeMs = 0;
 
 midiEventPacket_t rx;
 
-LED_BEAT_ONE = 13;
-LED_BEAT_TWO = 12;
-LED_BEAT_THREE = 11;
-LED_BEAT_FOUR = 10;
+const int LED_BEAT_ONE = 13;
+const int LED_BEAT_TWO = 12;
+const int LED_BEAT_THREE = 11;
+const int LED_BEAT_FOUR = 10;
 
 void setup() {
   /* Serial.begin(31250); */
@@ -101,10 +106,6 @@ void setup() {
   display.printFixedN(34,  0, "Mixxx", STYLE_NORMAL, FONT_SIZE_2X);
   display.printFixedN(5,  16, "MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
 
-  delay(2000);
-
-  display.clear();
-
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
   initializeTimer();
@@ -113,12 +114,27 @@ void setup() {
   pinMode(LED_BEAT_TWO, OUTPUT);
   pinMode(LED_BEAT_THREE, OUTPUT);
   pinMode(LED_BEAT_FOUR, OUTPUT);
+
+  pinMode(CLOCK_MODE_BUTTON, INPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
+
+  int clockModeButtonState = digitalRead(CLOCK_MODE_BUTTON);
+  if (clockModeButtonState == HIGH) {
+    currentClockStatus = clockStatus::ready;
+  } else {
+    currentClockStatus = clockStatus::free;
+  }
+  previousClockModeButtonState = clockModeButtonState;
+  lastClockModeButtonPressMs = millis();
 
   jogKnob = new RotaryEncoder(3, 7, RotaryEncoder::LatchMode::FOUR3);
   attachInterrupt(digitalPinToInterrupt(3), checkJogKnobPosition, CHANGE);
   attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE);
+
+  delay(2000);
+
+  display.clear();
 }
 
 void loop() {
@@ -137,6 +153,29 @@ void loop() {
 
   pulseBPMLED();
   drawUI();
+
+  handleClockModeButton();
+}
+
+void handleClockModeButton() {
+  int clockModeButtonState = digitalRead(CLOCK_MODE_BUTTON);
+
+  if (clockModeButtonState != previousClockModeButtonState &&
+      (millis() - lastClockModeButtonPressMs > 50)) {
+    if (clockModeButtonState == HIGH) {
+      if (currentClockStatus == clockStatus::free) {
+        currentClockStatus = clockStatus::ready;
+      }
+    } else {
+      if (currentClockStatus != clockStatus::free) {
+        currentClockStatus = clockStatus::free;
+        receivingMidi = false;
+      }
+    }
+    updateUIClockStatus = true;
+    previousClockModeButtonState = clockModeButtonState;
+    lastClockModeButtonPressMs = millis();
+  }
 }
 
 void initializeTimer() {
@@ -248,79 +287,81 @@ void configureTimer(float intervalMicros) {
 }
 
 void readMidiUSB() {
-  do {
-    rx = MidiUSB.read();
-    if (rx.header != 0) {
-      debug("Received: ");
-      debug(rx.header);
-      debug("-");
-      debug(rx.byte1);
-      debug("-");
-      debug(rx.byte2);
-      debug("-");
-      debugln(rx.byte3);
+  if (currentClockStatus != clockStatus::free) {
+    do {
+      rx = MidiUSB.read();
+      if (rx.header != 0) {
+        debug("Received: ");
+        debug(rx.header);
+        debug("-");
+        debug(rx.byte1);
+        debug("-");
+        debug(rx.byte2);
+        debug("-");
+        debugln(rx.byte3);
 
-      switch (rx.byte1 & 0xF0) {
-      case 0xE0: {
-            // Pitch bend carries the bpm data
+        switch (rx.byte1 & 0xF0) {
+        case 0xE0: {
+              // Pitch bend carries the bpm data
 
-            // The Mixxx controller script subtracts 60 from the BPM so it fits in a
-            // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
-            // Supported BPM range: 60 - 187
-            mixxxBPMWhole = rx.byte2 + 60;
-            mixxxBPMFractional = rx.byte3 / 100.0;
+              // The Mixxx controller script subtracts 60 from the BPM so it fits in a
+              // 0-127 midi range. So, 60 is added to the value to get the actual BPM.
+              // Supported BPM range: 60 - 187
+              mixxxBPMWhole = rx.byte2 + 60;
+              mixxxBPMFractional = rx.byte3 / 100.0;
 
-            float oldMixxxBPM = mixxxBPM;
-            mixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
-            if (mixxxBPM != oldMixxxBPM) {
-              updateUIBPM = true;
-              if (currentClockStatus == clockStatus::synced_to_mixxx) {
-                float intervalMicros = bpmToIntervalMicros(mixxxBPM);
-                configureTimer(intervalMicros);
+              float oldMixxxBPM = mixxxBPM;
+              mixxxBPM = mixxxBPMWhole + mixxxBPMFractional;
+              if (mixxxBPM != oldMixxxBPM) {
+                updateUIBPM = true;
+                if (currentClockStatus == clockStatus::synced_to_mixxx) {
+                  float intervalMicros = bpmToIntervalMicros(mixxxBPM);
+                  configureTimer(intervalMicros);
+                }
               }
             }
-          }
-      case 0x90: {
-          // Note On for note B8 carries the beat_distance
-          if (rx.byte2 == 0x77 && !receivingMidi) {
-            // beat_distance value from Mixxx is a number between 0 and 1. It
-            // represents the distance from the previous beat marker. It is
-            // multiplied by 127 in order to pass it as a midi value, so it is
-            // divided here in order to get the original float value.
+        case 0x90: {
+            // Note On for note B8 carries the beat_distance
+            if (rx.byte2 == 0x77 && !receivingMidi) {
+              // beat_distance value from Mixxx is a number between 0 and 1. It
+              // represents the distance from the previous beat marker. It is
+              // multiplied by 127 in order to pass it as a midi value, so it is
+              // divided here in order to get the original float value.
 
-            // This assumes getting this message between beats 1 and 2 in a 4/4
-            // measure and tries the guess when beat 2 will start.
-            float beatDistance = 1 - (rx.byte3 / 127.0);
-            float startAt = ((MICROS_PER_MIN / mixxxBPM) * beatDistance);
+              // This assumes getting this message between beats 1 and 2 in a 4/4
+              // measure and tries the guess when beat 2 will start.
+              float beatDistance = 1 - (rx.byte3 / 127.0);
+              float startAt = ((MICROS_PER_MIN / mixxxBPM) * beatDistance);
 
-            CONFIGURE_TIMER1 (
-              configureTimer(startAt);
-              TCNT1  = 0; // reset Timer1 counter to 0
-              currentClockStatus = clockStatus::syncing;
-              currentClockPulse = 1;
-              barPosition = PPQ + 1 // beat 2
-            )
-            receivingMidi = true;
-            updateUIClockStatus = true;
+              CONFIGURE_TIMER1 (
+                configureTimer(startAt);
+                TCNT1  = 0; // reset Timer1 counter to 0
+                currentClockStatus = clockStatus::syncing;
+                currentClockPulse = 1;
+                barPosition = PPQ + 1 // beat 2
+              )
+              receivingMidi = true;
+              updateUIClockStatus = true;
+            }
+            break;
           }
-          break;
-        }
-      case 0x80: {
-          // Note Off for note B8 indicates nothing is playing from Mixxx and
-          // there is no sync leader
-          if (rx.byte2 == 0x77) {
-            receivingMidi = false;
-            currentClockStatus = clockStatus::free;
-            updateUIClockStatus = true;
+        case 0x80: {
+            // Note Off for note B8 indicates nothing is playing from Mixxx and
+            // there is no sync leader
+            if (rx.byte2 == 0x77) {
+              receivingMidi = false;
+              currentClockStatus = clockStatus::ready;
+              updateUIClockStatus = true;
+            }
+            break;
           }
-          break;
-        }
-      default: {
-          break;
+        default: {
+            break;
+          }
         }
       }
-    }
-  } while (rx.header != 0);
+    } while (rx.header != 0);
+  }
 }
 
 void sendMidiClock() {
@@ -515,6 +556,9 @@ void drawUIClockStatus() {
   switch (currentClockStatus) {
   case clockStatus::free:
     clockStatus = "Free   ";
+    break;
+  case clockStatus::ready:
+    clockStatus = "Ready  ";
     break;
   case clockStatus::syncing:
     clockStatus = "Syncing";
