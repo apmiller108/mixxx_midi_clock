@@ -6,15 +6,10 @@
  *
  */
 
-// TODO feature: add switch to keep clock in free mode
-// TODO feature: add pot to adjust bpm when in free clock mode
-
 #include "MIDIUSB.h" // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h> // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
 #include <RotaryEncoder.h> // https://github.com/mathertel/RotaryEncoder (BSD)
 #include <lcdgfx.h> // https://github.com/lexus2k/lcdgfx (MIT)
-
-MIDI_CREATE_DEFAULT_INSTANCE();
 
 #define DEBUG 0
 
@@ -27,6 +22,8 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 #endif
 
 #define CONFIGURE_TIMER1(X) noInterrupts(); X; interrupts();
+
+MIDI_CREATE_DEFAULT_INSTANCE();
 
 const unsigned long CPU_FREQ = 16000000;
 const unsigned long MICROS_PER_MIN = 60000000;
@@ -68,6 +65,12 @@ float mixxxBPMFractional;
 
 const int PLAY_BUTTON = 8;
 const int STOP_BUTTON = 4;
+
+// started:  MIDI start messge will be sent on beat 1.
+// playing:  MIDI start or continue sent.
+// paused:   MIDI stop sent. Bar position where paused is cached.
+// unpaused: MIDI continue will be sent. Play back will begin on the bar position where last paused.
+// stopped:  MIDI stop sent. Bar position is not cached.
 enum class playState {
   started,
   playing,
