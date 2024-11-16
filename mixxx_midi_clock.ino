@@ -32,17 +32,22 @@ const unsigned long CPU_FREQ = 16000000;
 const unsigned long MICROS_PER_MIN = 60000000;
 const int PPQ = 24;
 
-const float DEFAULT_BPM = 122;
+const float freeClockBPM = 122;
 
 const byte MIDI_START = 0xFA;
 const byte MIDI_CONT = 0xFB;
 const byte MIDI_STOP = 0xFC;
 const byte MIDI_CLOCK = 0xF8;
 
-const int CLOCK_MODE_BUTTON = 6;
+const int CLOCK_MODE_SWITCH = 6;
 int previousClockModeButtonState;
 long lastClockModeButtonPressMs;
 
+// free:             Ignores MIDI messages from Mixxx. Regular MIDI clock mode.
+// ready:            Listening for MIDI messages from Mixxx.
+// syncing:          Has receivd BPM and beat distance data from Mixxx.
+// syncing_complete: MIDI clock set to begin on next beat in Mixxx.
+// synced_to_mixxx:  MIDI clock started in sync to Mixxx.
 enum class clockStatus {
   free,
   ready,
@@ -71,8 +76,6 @@ enum class playState {
   stopped
 };
 enum playState currentPlayState = playState::stopped;
-int playButtonState;
-int stopButtonState;
 int previousPlayButtonState = LOW;
 int previousStopButtonState = LOW;
 
@@ -83,6 +86,9 @@ RotaryEncoder *jogKnob = nullptr;
 bool volatile tempoNudged = false;
 int volatile tempoNudgedAtClockPulse = 0;
 int volatile resumeFromTempoNudge = false;
+const int JOG_KNOB_BUTTOM = 9999;
+int previousJogKnobButtonState = LOW;
+unsigned long lastJogKnobBtnDebouceTime = 0;
 
 DisplaySSD1306_128x64_I2C display(-1); // -1 means default I2C address (0x3C)
 bool updateUIClockStatus = true;
@@ -115,17 +121,17 @@ void setup() {
   pinMode(LED_BEAT_THREE, OUTPUT);
   pinMode(LED_BEAT_FOUR, OUTPUT);
 
-  pinMode(CLOCK_MODE_BUTTON, INPUT);
+  pinMode(CLOCK_MODE_SWITCH, INPUT);
+  pinMode(JOG_KNOB_BUTTOM, INPUT);
   pinMode(PLAY_BUTTON, INPUT);
   pinMode(STOP_BUTTON, INPUT);
 
-  int clockModeButtonState = digitalRead(CLOCK_MODE_BUTTON);
-  if (clockModeButtonState == HIGH) {
+  int previousClockModeButtonState = digitalRead(CLOCK_MODE_SWITCH);
+  if (previousClockModeButtonState == HIGH) {
     currentClockStatus = clockStatus::ready;
   } else {
     currentClockStatus = clockStatus::free;
   }
-  previousClockModeButtonState = clockModeButtonState;
   lastClockModeButtonPressMs = millis();
 
   jogKnob = new RotaryEncoder(3, 7, RotaryEncoder::LatchMode::FOUR3);
@@ -155,32 +161,25 @@ void loop() {
   drawUI();
 
   handleClockModeButton();
-}
 
-void handleClockModeButton() {
-  int clockModeButtonState = digitalRead(CLOCK_MODE_BUTTON);
-
-  if (clockModeButtonState != previousClockModeButtonState &&
-      (millis() - lastClockModeButtonPressMs > 50)) {
-    if (clockModeButtonState == HIGH) {
-      if (currentClockStatus == clockStatus::free) {
-        currentClockStatus = clockStatus::ready;
-      }
-    } else {
-      if (currentClockStatus != clockStatus::free) {
-        currentClockStatus = clockStatus::free;
-        receivingMidi = false;
-      }
+  if (clockStatus == clockStatus::synced_to_mixxx) {
+    int buttonState = digitalRead(JOG_KNOB_BUTTOM);
+    if (buttonRising(JOG_KNOB_BUTTOM, buttonState) && (millis() - lastJogKnobBtnDebouceTime > debounceDelayMs)) {
+      CONFIGURE_TIMER1 (
+        configureTimer(bpmToIntervalMicros(mixxxBPM));
+        TCNT1  = 0;
+        currentClockPulse = 24;
+        barPosition = 96
+      )
+      lastJogKobButtonPressed = millis();
     }
-    updateUIClockStatus = true;
-    previousClockModeButtonState = clockModeButtonState;
-    lastClockModeButtonPressMs = millis();
+   previousJogKnobButtonState = buttonState;
   }
 }
 
 void initializeTimer() {
-  // Configure Timer1 for DEFAULT_BPM which uses a prescaler of 8
-  float intervalMicros = bpmToIntervalMicros(DEFAULT_BPM);
+  // Configure Timer1 for the default free clock BPM
+  float intervalMicros = bpmToIntervalMicros(getBPM());
   unsigned long ocr = (CPU_FREQ * intervalMicros) / (8 * 1000000);
   CONFIGURE_TIMER1(
     TCCR1A = 0; // Control Register A
@@ -378,13 +377,16 @@ void sendMidiTransportMessage(byte message) {
   MidiUSB.flush();
 }
 
-boolean buttonRising(int button) {
+boolean buttonRising(int button, int currentState) {
   switch (button) {
   case PLAY_BUTTON: {
-    return previousPlayButtonState == LOW && playButtonState == HIGH;
+    return previousPlayButtonState == LOW && currentState == HIGH;
   }
   case STOP_BUTTON: {
-    return previousStopButtonState == LOW && stopButtonState == HIGH;
+    return previousStopButtonState == LOW && currentState == HIGH;
+  }
+  case JOG_KNOB_BUTTOM: {
+    return previousJogKnobButtonState == LOW && currentState == HIGH;
   }
   default:
     break;
@@ -392,8 +394,8 @@ boolean buttonRising(int button) {
 }
 
 void handlePlayButton() {
-  playButtonState = digitalRead(PLAY_BUTTON);
-  if (buttonRising(PLAY_BUTTON) && (millis() - lastBtnDebounceTimeMs) > debounceDelayMs) {
+  inst buttonState = digitalRead(PLAY_BUTTON);
+  if (buttonRising(PLAY_BUTTON, buttonState) && (millis() - lastBtnDebounceTimeMs) > debounceDelayMs) {
     switch (currentPlayState) {
     case playState::stopped:
       currentPlayState = playState::started; // Will start on beat 1
@@ -418,7 +420,7 @@ void handlePlayButton() {
     lastBtnDebounceTimeMs = millis();
     updateUIPlayStatus = true;
   }
-  previousPlayButtonState = playButtonState;
+  previousPlayButtonState = buttonState;
 }
 
 // Resume playing at the same position in the bar when paused.
@@ -440,14 +442,14 @@ void onStart() {
 }
 
 void handleStopButton() {
-  stopButtonState = digitalRead(STOP_BUTTON);
-  if (buttonRising(STOP_BUTTON) && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
+  int buttonState = digitalRead(STOP_BUTTON);
+  if (buttonRising(STOP_BUTTON, buttonState) && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
     sendMidiTransportMessage(MIDI_STOP);
     currentPlayState = playState::stopped;
     lastBtnDebounceTimeMs = millis();
     updateUIPlayStatus = true;
   }
-  previousStopButtonState = stopButtonState;
+  previousStopButtonState = buttonState;
 }
 
 // Interrupt function that updates the encoder's state
@@ -468,10 +470,20 @@ void handleJogKnob() {
   if (position != newPosition) {
     switch (jogKnob->getDirection()) {
     case RotaryEncoder::Direction::CLOCKWISE:
-      nudgeTempo(0.9);
+      if (clockStatus == clockStatus::free && digitalRead(JOG_KNOB_BUTTOM)) {
+        freeClockBPM = Math.min(240, freeClockBPM + 0.1)
+        configureTimer(bpmToIntervalMicros(freeClockBPM));
+      } else {
+        nudgeTempo(0.9);
+      }
       break;
     case RotaryEncoder::Direction::COUNTERCLOCKWISE:
-      nudgeTempo(1.1);
+      if (clockStatus == clockStatus::free && digitalRead(JOG_KNOB_BUTTOM)) {
+        freeClockBPM = Math.max(60, freeClockBPM - 0.1)
+        configureTimer(bpmToIntervalMicros(freeClockBPM));
+      } else {
+        nudgeTempo(1.1);
+      }
       break;
     default:
       // NOROTATION
@@ -503,8 +515,9 @@ void onResumeFromTempoNudge() {
 float getBPM() {
   if (currentClockStatus == clockStatus::synced_to_mixxx) {
     return mixxxBPM;
+  } else {
+    return freeClockBPM;
   }
-  return DEFAULT_BPM;
 }
 
 int bpmLEDPulseTime = 1;
@@ -606,3 +619,23 @@ void drawUIPlayState() {
   }
   display.printFixedN(100, 0, icon, STYLE_NORMAL, FONT_SIZE_2X);
 }
+
+void handleClockModeButton() {
+  int buttonState = digitalRead(CLOCK_MODE_SWITCH);
+
+  if (buttonState != previousClockModeButtonState && (millis() - lastClockModeButtonPressMs > 50)) {
+    if (buttonState == HIGH) {
+      currentClockStatus = clockStatus::ready;
+    } else {
+      currentClockStatus = clockStatus::free;
+      receivingMidi = false;
+      if (mixxxBPM) {
+        freeClockBPM = mixxxBPM
+      }
+    }
+    updateUIClockStatus = true;
+    previousClockModeButtonState = buttonState;
+    lastClockModeButtonPressMs = millis();
+  }
+}
+
