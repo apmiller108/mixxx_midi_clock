@@ -98,21 +98,53 @@ bool updateUIPlayStatus = true;
 bool updateUIBPM = true;
 unsigned long lastDrawUIDebounceTimeMs = 0;
 
-midiEventPacket_t rx;
-
 const int LED_BEAT_ONE = 13;
 const int LED_BEAT_TWO = 12;
 const int LED_BEAT_THREE = 11;
 const int LED_BEAT_FOUR = 10;
 
+// Store string constants in program memory to minimize RAM usage
+const char clockStatusFree[] PROGMEM    = "Free   ";
+const char clockStatusReady[] PROGMEM   = "Ready  ";
+const char clockStatusSyncing[] PROGMEM = "Syncing";
+const char clockStatusSynced[] PROGMEM  = "Synced ";
+const char playStateStarted[] PROGMEM   = ">|";
+const char playStatePlaying[] PROGMEM   = "|>";
+const char playStatePaused[] PROGMEM    = "||";
+const char playStateStopped[] PROGMEM   = "[]";
+const char splashMixxx[] PROGMEM        = "Mixxx";
+const char splashMidiClock[] PROGMEM    = "MIDI Clock"
+
+const char* const uiStringsTable[] PROGMEM = {
+  clockStatusFree,
+  clockStatusReady,
+  clockStatusSyncing,
+  clockStatusSynced,
+  playStateStarted,
+  playStatePlaying,
+  playStatePaused,
+  playStateStopped,
+  splashMixxx,
+  splashMidiClock
+};
+
+char* getStringFromTable(uint8_t index) {
+  char buffer[11]
+  strcpy_P(buffer, (char*)pgm_read_word(&(uiStringsTable[index])));
+  return buffer;
+}
+
 void setup() {
-  /* Serial.begin(31250); */
+  if (DEBUG) {
+    Serial.begin(31250);
+  }
+
   display.begin();
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
   display.setColor(1);
-  display.printFixedN(34,  0, "Mixxx", STYLE_NORMAL, FONT_SIZE_2X);
-  display.printFixedN(5,  16, "MIDI Clock", STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(34,  0, getStringFromTable(8), STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(5,  16, getStringFromTable(9), STYLE_NORMAL, FONT_SIZE_2X);
 
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
@@ -275,6 +307,8 @@ void configureTimer(float intervalMicros) {
 
 void readMidiUSB() {
   if (currentClockStatus != clockStatus::free) {
+    midiEventPacket_t rx;
+
     do {
       rx = MidiUSB.read();
       if (rx.header != 0) {
@@ -557,29 +591,29 @@ bool updateUI() {
   return updateUIClockStatus || updateUIPlayStatus || updateUIBPM;
 }
 
+
 void drawUIClockStatus() {
-  char* clockStatus;
+  int index;
   switch (currentClockStatus) {
   case clockStatus::free:
-    clockStatus = "Free   ";
+    index = 0;
     break;
   case clockStatus::ready:
-    clockStatus = "Ready  ";
+    index = 1;
     break;
   case clockStatus::syncing:
-    clockStatus = "Syncing";
+    index = 2;
     break;
   case clockStatus::syncing_complete:
-    clockStatus = "Syncing";
+    index = 2;
     break;
   case clockStatus::synced_to_mixxx:
-    clockStatus = "Synced ";
+    index = 3
     break;
   default:
-    clockStatus = "       ";
     break;
   }
-  display.printFixedN(0, 0, clockStatus, STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(0, 0, getStringFromTable(index), STYLE_NORMAL, FONT_SIZE_2X);
 }
 
 void drawUIBPM() {
@@ -589,28 +623,27 @@ void drawUIBPM() {
 }
 
 void drawUIPlayState() {
-  char* icon;
+  int index;
   switch (currentPlayState) {
   case playState::started:
-    icon = ">|";
+    index = 4;
     break;
   case playState::playing:
-    icon = "|>";
+    index = 5;
     break;
   case playState::paused:
-    icon = "||";
+    index = 6;
     break;
   case playState::unpaused:
-    icon = ">|";
+    index = 4;
     break;
   case playState::stopped:
-    icon = "[]";
+    index = 7;
     break;
   default:
-    icon = "";
     break;
   }
-  display.printFixedN(100, 0, icon, STYLE_NORMAL, FONT_SIZE_2X);
+  display.printFixedN(100, 0, getStringFromTable(index), STYLE_NORMAL, FONT_SIZE_2X);
 }
 
 void handleClockModeButton() {
