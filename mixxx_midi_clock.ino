@@ -113,7 +113,7 @@ const char playStatePlaying[] PROGMEM   = "|>";
 const char playStatePaused[] PROGMEM    = "||";
 const char playStateStopped[] PROGMEM   = "[]";
 const char splashMixxx[] PROGMEM        = "Mixxx";
-const char splashMidiClock[] PROGMEM    = "MIDI Clock"
+const char splashMidiClock[] PROGMEM    = "MIDI Clock";
 
 const char* const uiStringsTable[] PROGMEM = {
   clockStatusFree,
@@ -128,10 +128,9 @@ const char* const uiStringsTable[] PROGMEM = {
   splashMidiClock
 };
 
-char* getStringFromTable(uint8_t index) {
-  char buffer[11]
-  strcpy_P(buffer, (char*)pgm_read_word(&(uiStringsTable[index])));
-  return buffer;
+void getStringFromTable(uint8_t index, char* buffer) {
+  PGM_P p = (PGM_P)pgm_read_word(&(uiStringsTable[index]));
+  strcpy_P(buffer, p);
 }
 
 void setup() {
@@ -139,12 +138,16 @@ void setup() {
     Serial.begin(31250);
   }
 
+  char buffer[11];
+
   display.begin();
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
   display.setColor(1);
-  display.printFixedN(34,  0, getStringFromTable(8), STYLE_NORMAL, FONT_SIZE_2X);
-  display.printFixedN(5,  16, getStringFromTable(9), STYLE_NORMAL, FONT_SIZE_2X);
+  getStringFromTable(8, buffer);
+  display.printFixedN(34,  0, buffer, STYLE_NORMAL, FONT_SIZE_2X);
+  getStringFromTable(9, buffer);
+  display.printFixedN(5,  16, buffer, STYLE_NORMAL, FONT_SIZE_2X);
 
   MIDI.begin(MIDI_CHANNEL_OMNI);
 
@@ -594,6 +597,7 @@ bool updateUI() {
 
 void drawUIClockStatus() {
   int index;
+  char buffer[8];
   switch (currentClockStatus) {
   case clockStatus::free:
     index = 0;
@@ -608,12 +612,13 @@ void drawUIClockStatus() {
     index = 2;
     break;
   case clockStatus::synced_to_mixxx:
-    index = 3
+    index = 3;
     break;
   default:
     break;
   }
-  display.printFixedN(0, 0, getStringFromTable(index), STYLE_NORMAL, FONT_SIZE_2X);
+  getStringFromTable(index, buffer);
+  display.printFixedN(0, 0, buffer, STYLE_NORMAL, FONT_SIZE_2X);
 }
 
 void drawUIBPM() {
@@ -624,6 +629,8 @@ void drawUIBPM() {
 
 void drawUIPlayState() {
   int index;
+  char buffer[3];
+
   switch (currentPlayState) {
   case playState::started:
     index = 4;
@@ -643,7 +650,9 @@ void drawUIPlayState() {
   default:
     break;
   }
-  display.printFixedN(100, 0, getStringFromTable(index), STYLE_NORMAL, FONT_SIZE_2X);
+
+  getStringFromTable(index, buffer);
+  display.printFixedN(100, 0, buffer, STYLE_NORMAL, FONT_SIZE_2X);
 }
 
 void handleClockModeButton() {
