@@ -1,12 +1,15 @@
 # Mixxx MIDI Clock
-Ardunio based midi clock generator for [Mixxx](https://mixxx.org/). MIDI clock
+Ardunio based MIDI clock generator for [Mixxx](https://mixxx.org/). MIDI clock
 can be used to sync external gear (sequencer, samplers, drum machinem etc...) to
 tracks playing in Mixxx.
 
 ## How does it work?
 The controller script send two midi messages to the Arduino device at regular
-intervals. One message contains the BPM of the [Sync Leader](https://manual.mixxx.org/2.4/de/chapters/djing_with_mixxx#sync-lock-with-dynamic-tempo)
-and the other message contains the beat distance. The BPM data is used to create
+intervals. One message contains the [BPM](https://manual.mixxx.org/2.4/en/chapters/appendix/mixxx_controls#control-[ChannelN]-bpm)
+of the [Sync Leader](https://manual.mixxx.org/2.4/de/chapters/djing_with_mixxx#sync-lock-with-dynamic-tempo)
+and the other message contains the 
+[beat distance](https://manual.mixxx.org/2.4/en/chapters/appendix/mixxx_controls#control-[ChannelN]-beat_distance). 
+The BPM data is used to create
 the MIDI clock and the beat distance data is used to determine when the clock
 should start. While it is required that a Sync Leader be set in order for the
 device to produce a MIDI clock, it is not required that sync be used on the
@@ -38,3 +41,9 @@ The device can be used independent of Mixxx as a master MIDI clock. Use the Cloc
 - Turning the encoder without pressing down will change the beat alignment (ie phase).
 ## Getting Started
 ## Known Issues
+## Disclaimer
+While this device works great for me (the author of this code), I can make no
+guarantees that it will work for you.
+
+### Tested on
+- Mixxx v2.4 running on Linux (pipewire), Arduino Leonardo
