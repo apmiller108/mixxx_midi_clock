@@ -62,7 +62,7 @@ int mixxxBPMWhole;
 float mixxxBPMFractional;
 float freeClockBPM = 122;
 
-const int PLAY_BUTTON = 8;
+const int PLAY_BUTTON = 7;
 const int STOP_BUTTON = 4;
 
 // started:  MIDI start messge will be sent on beat 1.
@@ -85,12 +85,15 @@ unsigned long lastBtnDebounceTimeMs = 0;
 int debounceDelayMs = 200;
 
 RotaryEncoder *jogKnob = nullptr;
-bool volatile tempoNudged = false;
-int volatile tempoNudgedAtClockPulse = 0;
-int volatile resumeFromTempoNudge = false;
+const int JOG_KNOB_PIN1 = 9;
+const int JOG_KNOB_PIN2 = 8;
 const int JOG_KNOB_BUTTON = 5;
 int previousJogKnobButtonState = LOW;
 unsigned long lastJogKnobBtnDebouceTime = 0;
+
+bool volatile tempoNudged = false;
+int volatile tempoNudgedAtClockPulse = 0;
+int volatile resumeFromTempoNudge = false;
 
 DisplaySSD1306_128x64_I2C display(-1); // -1 means default I2C address (0x3C)
 bool updateUIClockStatus = true;
@@ -171,7 +174,7 @@ void setup() {
   }
   lastClockModeButtonPressMs = millis();
 
-  jogKnob = new RotaryEncoder(9, 7, RotaryEncoder::LatchMode::FOUR3);
+  jogKnob = new RotaryEncoder(JOG_KNOB_PIN1, JOG_KNOB_PIN2, RotaryEncoder::LatchMode::FOUR3);
   attachInterrupt(digitalPinToInterrupt(9), checkJogKnobPosition, CHANGE);
   attachInterrupt(digitalPinToInterrupt(7), checkJogKnobPosition, CHANGE);
 
