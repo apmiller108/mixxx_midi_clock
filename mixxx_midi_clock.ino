@@ -58,8 +58,6 @@ int pausePosition;
 bool receivingMidi = false;
 
 float mixxxBPM = 0;
-int mixxxBPMWhole;
-float mixxxBPMFractional;
 float freeClockBPM = 122;
 
 const int PLAY_BUTTON = 7;
@@ -80,8 +78,6 @@ enum class playState {
   stopped
 };
 enum playState currentPlayState = playState::stopped;
-int previousPlayButtonState = LOW;
-int previousStopButtonState = LOW;
 
 unsigned long lastBtnDebounceTimeMs = 0;
 int debounceDelayMs = 200;
@@ -90,8 +86,6 @@ RotaryEncoder *jogKnob = nullptr;
 const int JOG_KNOB_PIN1 = 9;
 const int JOG_KNOB_PIN2 = 8;
 const int JOG_KNOB_BUTTON = 5;
-int previousJogKnobButtonState = LOW;
-unsigned long lastJogKnobBtnDebouceTime = 0;
 
 bool volatile tempoNudged = false;
 int volatile tempoNudgedAtClockPulse = 0;
@@ -101,7 +95,6 @@ DisplaySSD1306_128x64_I2C display(-1); // -1 means default I2C address (0x3C)
 bool updateUIClockStatus = true;
 bool updateUIPlayStatus = true;
 bool updateUIBPM = true;
-unsigned long lastDrawUIDebounceTimeMs = 0;
 
 const int LED_BEAT_ONE = 13;
 const int LED_BEAT_TWO = 12;
@@ -317,6 +310,9 @@ void configureTimer(float intervalMicros) {
 }
 
 void readMidiUSB() {
+  static int mixxxBPMWhole;
+  static float mixxxBPMFractional;
+
   if (currentClockStatus != clockStatus::free) {
     midiEventPacket_t rx;
 
@@ -410,25 +406,15 @@ void sendMidiTransportMessage(byte message) {
   MidiUSB.flush();
 }
 
-boolean buttonRising(int button, int currentState) {
-  switch (button) {
-  case PLAY_BUTTON: {
-    return previousPlayButtonState == LOW && currentState == HIGH;
-  }
-  case STOP_BUTTON: {
-    return previousStopButtonState == LOW && currentState == HIGH;
-  }
-  case JOG_KNOB_BUTTON: {
-    return previousJogKnobButtonState == LOW && currentState == HIGH;
-  }
-  default:
-    break;
-  }
+boolean buttonRising(int previousState, int currentState) {
+  return previousState == LOW && currentState == HIGH;
 }
 
 void handlePlayButton() {
+  static int previousButtonState = LOW;
   int buttonState = digitalRead(PLAY_BUTTON);
-  if (buttonRising(PLAY_BUTTON, buttonState) && (millis() - lastBtnDebounceTimeMs) > debounceDelayMs) {
+
+  if (buttonRising(previousButtonState, buttonState) && (millis() - lastBtnDebounceTimeMs) > debounceDelayMs) {
     switch (currentPlayState) {
     case playState::stopped:
       currentPlayState = playState::started; // Will start on beat 1
@@ -459,6 +445,18 @@ void handlePlayButton() {
   previousPlayButtonState = buttonState;
 }
 
+void handleStopButton() {
+  static int previousButtonState = LOW;
+  int buttonState = digitalRead(STOP_BUTTON);
+
+  if (buttonRising(previousButtonState, buttonState) && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
+    currentPlayState = playState::stopping;
+    lastBtnDebounceTimeMs = millis();
+    updateUIPlayStatus = true;
+  }
+  previousStopButtonState = buttonState;
+}
+
 // Always start on beat 1
 void onStart() {
   if (currentPlayState == playState::started && barPosition == 96) {
@@ -484,16 +482,6 @@ void onContinue() {
     currentPlayState = playState::playing;
     updateUIPlayStatus = true;
   }
-}
-
-void handleStopButton() {
-  int buttonState = digitalRead(STOP_BUTTON);
-  if (buttonRising(STOP_BUTTON, buttonState) && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
-    currentPlayState = playState::stopping;
-    lastBtnDebounceTimeMs = millis();
-    updateUIPlayStatus = true;
-  }
-  previousStopButtonState = buttonState;
 }
 
 // Interrupt function that updates the encoder's state
@@ -592,6 +580,7 @@ void pulseBPMLED() {
 }
 
 void drawUI() {
+  static unsigned long lastDrawUIDebounceTimeMs = 0;
   if (updateUI && ((millis() - lastDrawUIDebounceTimeMs) > debounceDelayMs)) {
     if (updateUIBPM) {
       drawUIBPM();
