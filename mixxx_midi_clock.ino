@@ -65,16 +65,18 @@ float freeClockBPM = 122;
 const int PLAY_BUTTON = 7;
 const int STOP_BUTTON = 4;
 
-// started:  MIDI start messge will be sent on beat 1.
+// started:  MIDI start messge will be sent at the beginning of the next 4/4 measure.
 // playing:  MIDI start or continue sent.
-// paused:   MIDI stop sent. Bar position where paused is cached.
-// unpaused: MIDI continue will be sent. Play back will begin on the bar position where last paused.
+// paused:   MIDI stop sent. 4/4 measure position where paused is cached.
+// unpaused: MIDI continue will be sent. Play back will begin on the 4/4 measure position where previously paused.
+// stopping: MIDI stop will be sent at the end of the current 4/4 measure.
 // stopped:  MIDI stop sent. Bar position is not cached.
 enum class playState {
   started,
   playing,
   paused,
   unpaused,
+  stopping,
   stopped
 };
 enum playState currentPlayState = playState::stopped;
@@ -115,6 +117,7 @@ const char playStateStarted[] PROGMEM   = ">|";
 const char playStatePlaying[] PROGMEM   = "|>";
 const char playStatePaused[] PROGMEM    = "||";
 const char playStateStopped[] PROGMEM   = "[]";
+const char playStateStopping[] PROGMEM  = ">]";
 const char splashMixxx[] PROGMEM        = "Mixxx";
 const char splashMidiClock[] PROGMEM    = "MIDI Clock";
 
@@ -127,6 +130,7 @@ const char* const uiStringsTable[] PROGMEM = {
   playStatePlaying,
   playStatePaused,
   playStateStopped,
+  playStateStopping,
   splashMixxx,
   splashMidiClock
 };
@@ -147,9 +151,9 @@ void setup() {
   display.clear();
   display.setFixedFont(ssd1306xled_font6x8);
   display.setColor(1);
-  getStringFromTable(8, buffer);
-  display.printFixedN(34,  0, buffer, STYLE_NORMAL, FONT_SIZE_2X);
   getStringFromTable(9, buffer);
+  display.printFixedN(34,  0, buffer, STYLE_NORMAL, FONT_SIZE_2X);
+  getStringFromTable(10, buffer);
   display.printFixedN(5,  16, buffer, STYLE_NORMAL, FONT_SIZE_2X);
 
   MIDI.begin(MIDI_CHANNEL_OMNI);
@@ -191,8 +195,9 @@ void loop() {
   handlePlayButton();
   handleStopButton();
 
-  onContinue();
   onStart();
+  onStop();
+  onContinue();
 
   handleJogKnob();
   onResumeFromTempoNudge();
@@ -442,6 +447,9 @@ void handlePlayButton() {
     case playState::started:
       currentPlayState = playState::stopped; // Abort start playing
       break;
+    case playState::stopping:
+      currentPlayState = playState::playing; // Abort stop playing
+      break;
     default:
       break;
     }
@@ -449,15 +457,6 @@ void handlePlayButton() {
     updateUIPlayStatus = true;
   }
   previousPlayButtonState = buttonState;
-}
-
-// Resume playing at the same position in the bar when paused.
-void onContinue() {
-  if (currentPlayState == playState::unpaused && pausePosition == barPosition) {
-    sendMidiTransportMessage(MIDI_CONT);
-    currentPlayState = playState::playing;
-    updateUIPlayStatus = true;
-  }
 }
 
 // Always start on beat 1
@@ -469,11 +468,28 @@ void onStart() {
   }
 }
 
+// Stop playback at the end of the current 4/4 measure
+void onStop() {
+  if (currentPlayState == playState::stopping && barPosition == 96) {
+    sendMidiTransportMessage(MIDI_STOP);
+    currentPlayState = playState::stopped;
+    updateUIPlayStatus = true;
+  }
+}
+
+// Resume playing at the same position in the bar when paused.
+void onContinue() {
+  if (currentPlayState == playState::unpaused && pausePosition == barPosition) {
+    sendMidiTransportMessage(MIDI_CONT);
+    currentPlayState = playState::playing;
+    updateUIPlayStatus = true;
+  }
+}
+
 void handleStopButton() {
   int buttonState = digitalRead(STOP_BUTTON);
   if (buttonRising(STOP_BUTTON, buttonState) && ((millis() - lastBtnDebounceTimeMs) > debounceDelayMs)) {
-    sendMidiTransportMessage(MIDI_STOP);
-    currentPlayState = playState::stopped;
+    currentPlayState = playState::stopping;
     lastBtnDebounceTimeMs = millis();
     updateUIPlayStatus = true;
   }
@@ -646,6 +662,9 @@ void drawUIPlayState() {
     break;
   case playState::unpaused:
     index = 4;
+    break;
+  case playState::stopping:
+    index = 8;
     break;
   case playState::stopped:
     index = 7;
