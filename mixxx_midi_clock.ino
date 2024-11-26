@@ -114,7 +114,7 @@ const char playStateStopping[] PROGMEM  = ">]";
 const char splashMixxx[] PROGMEM        = "Mixxx";
 const char splashMidiClock[] PROGMEM    = "MIDI Clock";
 
-const char* const uiStringsTable[] PROGMEM = {
+const char* const stringsTable[] PROGMEM = {
   clockStatusFree,
   clockStatusReady,
   clockStatusSyncing,
@@ -129,7 +129,7 @@ const char* const uiStringsTable[] PROGMEM = {
 };
 
 void getStringFromTable(uint8_t index, char* buffer) {
-  PGM_P p = (PGM_P)pgm_read_word(&(uiStringsTable[index]));
+  PGM_P p = (PGM_P)pgm_read_word(&(stringsTable[index]));
   strcpy_P(buffer, p);
 }
 
