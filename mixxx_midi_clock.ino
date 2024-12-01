@@ -8,7 +8,7 @@
 
 #include "MIDIUSB.h" // https://github.com/arduino-libraries/MIDIUSB (GNU LGPL)
 #include <MIDI.h> // https://github.com/FortySevenEffects/arduino_midi_library (MIT)
-#include <RotaryEncoder.h> // https://github.com/mathertel/RotaryEncoder (BSD)
+#include <RotaryEncoder.h> // https://github.com/mathertel/RotaryEncoder (BSD clause 3)
 #include <lcdgfx.h> // https://github.com/lexus2k/lcdgfx (MIT)
 
 #define DEBUG 0
