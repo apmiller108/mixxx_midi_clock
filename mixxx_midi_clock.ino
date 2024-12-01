@@ -442,7 +442,7 @@ void handlePlayButton() {
     lastBtnDebounceTimeMs = millis();
     updateUIPlayStatus = true;
   }
-  previousPlayButtonState = buttonState;
+  previousButtonState = buttonState;
 }
 
 void handleStopButton() {
@@ -454,7 +454,7 @@ void handleStopButton() {
     lastBtnDebounceTimeMs = millis();
     updateUIPlayStatus = true;
   }
-  previousStopButtonState = buttonState;
+  previousButtonState = buttonState;
 }
 
 // Always start on beat 1
