@@ -50,7 +50,7 @@ There are two buttons that send MIDI Stop, Start and Continue messages to provid
 - When playing, pressing this button will pause playback.
 - When paused, pressing this button will resume playback from the beat position where it was paused.
 #### Stop button
-- Stops playback. On the next press of the Play Button, playback will begin on beat one.
+- Stops playback at the end of the current 4/4 measure. On the next press of the Play Button, playback will begin on beat one.
 ### OLED Display
 - Clock Status
 - Sequencer state (playing, paused, stopped, queued)
@@ -67,7 +67,7 @@ In Free Clock Mode:
   phase) just like in Mixxx Clock mode.
 ## Getting Started
 TODO: add instructions for each step
-1. Build the Arduino project.
+1. Build the Arduino project. See [instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Arduino-prototype)
 2. Use the [Arduino IDE](https://www.arduino.cc/en/software) to upload the code
    to the Arudino. This is the `mixxx_midi_clock.ino` file.
 3. Move the controller script files to the `controllers` directory in your
@@ -96,4 +96,5 @@ systemctl --user restart wireplumber pipewire pipewire-pulse
 - While this device works great for me (the author of this code), I can make no
 guarantees that it will work for you.
 - The design of this is highly opionated and built around my personal workflow and style.
+- This is my first Arudino project and I'm probably doing some stupid things.
 
