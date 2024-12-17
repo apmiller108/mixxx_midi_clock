@@ -67,7 +67,7 @@ In Free Clock Mode:
   phase) just like in Mixxx Clock mode.
 ## Getting Started
 TODO: add instructions for each step
-1. Build the Arduino project. See [instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Arduino-prototype)
+1. Build the Arduino project. See [instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Building-the-Arduino-prototype)
 2. Use the [Arduino IDE](https://www.arduino.cc/en/software) to upload the code
    to the Arudino. This is the `mixxx_midi_clock.ino` file.
 3. Move the controller script files to the `controllers` directory in your
