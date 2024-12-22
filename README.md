@@ -66,17 +66,17 @@ In Free Clock Mode:
 - Turning the encoder without pressing down will change the beat alignment (ie
   phase) just like in Mixxx Clock mode.
 ## Getting Started
-TODO: add instructions for each step
+
 1. Build the Arduino project. See [instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Building-the-Arduino-prototype)
-2. Use the [Arduino IDE](https://www.arduino.cc/en/software) to upload the code
-   to the Arudino. This is the `mixxx_midi_clock.ino` file.
+2. Use the [Arduino IDE](https://www.arduino.cc/en/software) to compile and upload the code
+   to the Arudino. This is the `mixxx_midi_clock.ino` file. See [instructions](https://support.arduino.cc/hc/en-us/articles/4733418441116-Upload-a-sketch-in-Arduino-IDE). 
 3. Move the controller script files to the `controllers` directory in your
   [Mixxx settings directory](https://manual.mixxx.org/2.4/en/chapters/appendix/settings_directory). 
    The script consists of two files:
     - `mixxx_midi_clock-script.js`
     - `mixxx_midi_click.midi.xml`
 4. Connect the Arduio to the gear that you want synced to Mixxx. MIDI clock is sent via the 5 pin DIN output and over USB.
-5. Load the controller mapping (ie the script files) for the Arduino in Mixxx's 
+5. Load the controller mapping (ie the controller script files) for the Arduino in Mixxx's 
    [controller settings](https://manual.mixxx.org/2.4/en/chapters/controlling_mixxx#using-midi-hid-controllers).
 5. Load a track and set the deck to be a Sync Leader. When pressing play on this deck, the clock will start.
 6. Press the play button on the Arudino to start your external sequencer using MIDI transport (or just start your sequencer directly).
