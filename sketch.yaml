@@ -1,0 +1,10 @@
+profiles:
+  mixxx_midi_clock:
+    fqbn: arduino:avr:leonardo
+    platforms:
+      - platform: arduino:avr (1.8.6)
+    libraries:
+      - MIDIUSB (1.0.5)
+      - MIDI Library (5.0.2)
+      - RotaryEncoder (1.5.3)
+      - lcdgfx (1.1.5)
