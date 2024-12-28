@@ -67,22 +67,28 @@ In Free Clock Mode:
   phase) just like in Mixxx Clock mode.
 ## Getting Started
 
-1. Build the Arduino project. See [instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Building-the-Arduino-prototype)
-2. Use the [Arduino IDE](https://www.arduino.cc/en/software) to compile and upload the code
-   to the Arudino. This is the `mixxx_midi_clock.ino` file. See [instructions](https://support.arduino.cc/hc/en-us/articles/4733418441116-Upload-a-sketch-in-Arduino-IDE). 
-3. Move the controller script files to the `controllers` directory in your
+1. Build the Arduino project. See [build instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Building-the-Arduino-prototype).
+2. Download the latest [release](https://github.com/apmiller108/mixxx_midi_clock/releases) to your computer. Download the `mixxx_midi_clock.ino.hex` file.
+3. Upload the `mixxx_midi_clock.ino.hex` to the Arduino. See [upload instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Uploading-the-code)
+4. Move the controller script files to the `controllers` directory in your
   [Mixxx settings directory](https://manual.mixxx.org/2.4/en/chapters/appendix/settings_directory). 
    The script consists of two files:
     - `mixxx_midi_clock-script.js`
     - `mixxx_midi_click.midi.xml`
-4. Connect the Arduio to the gear that you want synced to Mixxx. MIDI clock is sent via the 5 pin DIN output and over USB.
+4. Use a MIDI cable to connect the Arduino to the gear that you want synced to
+   Mixxx. In addition to the 5 pin DIN output, MIDI clock is also sent over USB.
+   So you can also distribute the MIDI clock by routing it via your computer's
+   audio backend.
 5. Load the controller mapping (ie the controller script files) for the Arduino in Mixxx's 
    [controller settings](https://manual.mixxx.org/2.4/en/chapters/controlling_mixxx#using-midi-hid-controllers).
 5. Load a track and set the deck to be a Sync Leader. When pressing play on this deck, the clock will start.
 6. Press the play button on the Arudino to start your external sequencer using MIDI transport (or just start your sequencer directly).
-7. Make adjustments to the beat alignment using the encoder as needed.
+7. Make adjustments to the beat alignment using the encoder as needed. At first,
+   the beat will likely be slightly ahead. A couple counter clockwise turns on
+   the encounder should get the beats matched up. After that, there isn't much
+   need to make adjustments. The clock will follow the sync leader tempo changes.
 ## Tested on
-- Mixxx v2.4 running on Linux (pipewire) and Arduino Leonardo
+- Mixxx v2.4 running on Linux (pipewire), Arduino Leonardo and Roland T-8 drum machine
 ## Known Issues
 When running on Linux with pipewire, occassionaly the clock seems to run a bit
 fast for a given session. Every minute or so I need to turn the encoder counter
