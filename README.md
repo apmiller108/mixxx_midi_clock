@@ -3,6 +3,8 @@ Ardunio based MIDI clock generator for [Mixxx](https://mixxx.org/). MIDI clock
 can be used to sync external gear (sequencer, samplers, drum machinem etc...) to
 tracks playing in Mixxx.
 
+<img src="https://github.com/user-attachments/assets/e8a5072f-fe87-46cd-9184-a14144678f64" width="600"/>
+
 ## How does it work?
 The accompanying [Mixxx controller script](https://github.com/apmiller108/mixxx_midi_clock/tree/main/mixxx) 
 send two midi messages to the Arduino device at regular
