@@ -68,7 +68,7 @@ In Free Clock Mode:
 ## Getting Started
 
 1. Build the Arduino project. See [build instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Building-the-Arduino-prototype).
-2. Download the latest [release](https://github.com/apmiller108/mixxx_midi_clock/releases) to your computer. Download the `mixxx_midi_clock.ino.hex` file.
+2. Download the latest [release](https://github.com/apmiller108/mixxx_midi_clock/releases) to your computer (the `mixxx_midi_clock.ino.hex` file).
 3. Upload the `mixxx_midi_clock.ino.hex` to the Arduino. See [upload instructions in the Wiki](https://github.com/apmiller108/mixxx_midi_clock/wiki/Uploading-the-code)
 4. Move the controller script files to the `controllers` directory in your
   [Mixxx settings directory](https://manual.mixxx.org/2.4/en/chapters/appendix/settings_directory). 
@@ -81,7 +81,7 @@ In Free Clock Mode:
    audio backend.
 5. Load the controller mapping (ie the controller script files) for the Arduino in Mixxx's 
    [controller settings](https://manual.mixxx.org/2.4/en/chapters/controlling_mixxx#using-midi-hid-controllers).
-5. Load a track and set the deck to be a Sync Leader. When pressing play on this deck, the clock will start.
+5. Load a track and set the deck to be a [Sync Leader](https://www.youtube.com/watch?v=REiG8DBKr-M). When pressing play on this deck, the clock will start.
 6. Press the play button on the Arudino to start your external sequencer using MIDI transport (or just start your sequencer directly).
 7. Make adjustments to the beat alignment using the encoder as needed. At first,
    the beat will likely be slightly ahead. A couple counter clockwise turns on
