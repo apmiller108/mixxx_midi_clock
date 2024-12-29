@@ -36,7 +36,7 @@ MIDI is received from Mixxx over USB.
 - Follows tempo changes made to the Sync Leader deck.
 - Keeps track of the beat (ie, the position in a 4/4 measure). This allows for
   some sequencer like behavior (see [MIDI transport](#midi-transport)).
-### Beat adjustment (ie, phase)
+### Beat adjustment
 - The encoder can be used to temporarily slow down or speed up the MIDI clock.
   This can be used to align the beats of the external gear with the track playing
   in Mixxx if needed. Alignment will need to be done when the clock first
