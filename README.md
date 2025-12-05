@@ -7,15 +7,18 @@ tracks playing in Mixxx.
 
 ## How does it work?
 The accompanying [Mixxx controller script](https://github.com/apmiller108/mixxx_midi_clock/tree/main/mixxx) 
-send two midi messages to the Arduino device at regular
+sends two midi messages to the Arduino device at regular
 intervals. One message contains the [BPM](https://manual.mixxx.org/2.4/en/chapters/appendix/mixxx_controls#control-[ChannelN]-bpm)
 of the [Sync Leader](https://manual.mixxx.org/2.4/de/chapters/djing_with_mixxx#sync-lock-with-dynamic-tempo)
 and the other message contains the 
 [beat distance](https://manual.mixxx.org/2.4/en/chapters/appendix/mixxx_controls#control-[ChannelN]-beat_distance). 
 The BPM data is used to create the MIDI clock and the beat distance data is used
-to determine when the clock should start. While it is required that a Sync
-Leader be set in order for the to produce a MIDI clock, it is not required that
-sync be used on the other decks.
+to determine when the clock should start. 
+
+While it is required that a Sync Leader be set in order for the controller script to produce a MIDI clock, 
+it is not required that sync be used on the other decks. Also, the device can be set in [Free Clock](#master-midi-clock) mode 
+where the BPM and phase can be set manually allowing this to be used in any context, not just for Mixxx. **The key thing is that
+the device has jog wheel-like behaviour allowing for beat matching synced gear.**
 
 This device uses the beat distance data to guess where it should start sending
 MIDI clock messages. For example, when pressing play (assuming on beat one) on
